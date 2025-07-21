@@ -1,7 +1,7 @@
 import express from 'express';
 import session from 'express-session';
 import passport from 'passport';
-import './auth/google';
+import './auth/google.js';
 import authRoutes from './routes/auth.route.js';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -11,7 +11,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-    origin: process.env.CLIENT_URL,
+    origin: process.env.ORIGIN ,
     credentials: true
 }));
 app.use(express.json());

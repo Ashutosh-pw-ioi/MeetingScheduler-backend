@@ -50,11 +50,9 @@ const redirectUser = (req: Request, res: Response) => {
   const hasCalendarAccess = !!(user?.accessToken && user?.calendarConnected);
   
   if (hasCalendarAccess) {
-    // Full access - redirect to dashboard
-    res.redirect(`${process.env.CLIENT_URL}/dashboard?setup=complete`);
+    res.redirect(`${process.env.ORIGIN}/dashboard?setup=complete`);
   } else {
-    // Only basic auth - redirect to calendar setup
-    res.redirect(`${process.env.CLIENT_URL}/setup/calendar`);
+    res.redirect(`${process.env.ORIGIN}/setup/calendar`);
   }
 };
 
