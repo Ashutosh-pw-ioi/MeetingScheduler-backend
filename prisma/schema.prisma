@@ -64,5 +64,4 @@ model Booking {
   availability  Availability @relation(fields: [availabilityId], references: [id])
 
   createdAt     DateTime @default(now())
-
 }

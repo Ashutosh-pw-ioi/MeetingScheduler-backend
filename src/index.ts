@@ -5,6 +5,8 @@ import './auth/google.js';
 import authRoutes from './routes/auth.route.js';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import availabilityRoutes from './routes/availability.route.js';
+import bookingRoutes from './routes/bookingRoutes.routes.js';
 
 dotenv.config();
 
@@ -30,7 +32,9 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
+app.use('/api/availability', availabilityRoutes); 
+app.use('/api/booking', bookingRoutes);
 
 
 const PORT = process.env.PORT || 4000;
