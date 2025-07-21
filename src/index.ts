@@ -30,12 +30,8 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use('/auth', authRoutes);
-app.use('/api/user', authRoutes);
+app.use('/api/auth', authRoutes);
 
-app.get('/', (req, res) => {
-    res.send('<a href="/auth/google">Login with Google</a>');
-});
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
