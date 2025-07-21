@@ -38,8 +38,8 @@ const logoutUser = (req: Request, res: Response) => {
       if (err) {
         return res.status(500).json({ error: 'Session destroy failed' });
       }
-      res.clearCookie('connect.sid'); // Clear session cookie
-      res.redirect('/');
+      res.clearCookie('connect.sid'); 
+      res.redirect(`${process.env.ORIGIN}`);
     });
   });
 };
