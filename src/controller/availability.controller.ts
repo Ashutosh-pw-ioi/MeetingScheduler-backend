@@ -100,4 +100,42 @@ const createTodayAvailability = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
-export { createTodayAvailability, createFutureAvailability };   
+const deleteAvailabilityByRange = async (req: Request, res: Response) => {
+    const interviewerId = (req.user as any).id;
+    const { startTime, endTime } = req.body; 
+
+    if (!startTime || !endTime) {
+        return res.status(400).json({ message: "Both 'startTime' and 'endTime' strings are required in the request body." });
+    }
+
+    try {
+        const slotStartTime = new Date(startTime);
+        const slotEndTime = new Date(endTime);
+
+        if (isNaN(slotStartTime.getTime()) || isNaN(slotEndTime.getTime())) {
+            return res.status(400).json({ message: "Invalid date format. Please use full ISO 8601 date strings for startTime and endTime." });
+        }
+
+        const result = await prisma.availability.deleteMany({
+            where: {
+                interviewerId: interviewerId,
+                isBooked: false, 
+                startTime: {
+                    gte: slotStartTime, 
+                    lt: slotEndTime,    
+                },
+            },
+        });
+
+        if (result.count === 0) {
+            return res.status(404).json({ message: `No unbooked slots were found in the specified time range to delete.` });
+        }
+
+        res.status(200).json({ message: `Successfully deleted ${result.count} unbooked slots.` });
+
+    } catch (error) {
+        console.error("Error deleting availability range:", error);
+        res.status(500).json({ message: "An internal server error occurred while deleting the slots." });
+    }
+};
+export { createTodayAvailability, createFutureAvailability, deleteAvailabilityByRange };
