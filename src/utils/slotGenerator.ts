@@ -15,10 +15,12 @@ export const generateAvailabilitySlots = ({
 }) => {
   const slots: { startTime: Date; endTime: Date }[] = [];
 
+  // Create DateTime objects with explicit IST timezone
   const startDateTime = DateTime.fromISO(`${date}T${startTime}`, { zone: TIME_ZONE });
   const endDateTime = DateTime.fromISO(`${date}T${endTime}`, { zone: TIME_ZONE });
 
   if (!startDateTime.isValid || !endDateTime.isValid || startDateTime >= endDateTime) {
+    console.error('Invalid date/time:', { startDateTime, endDateTime });
     return [];
   }
 
@@ -29,6 +31,7 @@ export const generateAvailabilitySlots = ({
 
     if (slotEnd > endDateTime) break;
     if (slotStart > now) {
+      // Convert to JavaScript Date objects while preserving the timezone
       slots.push({
         startTime: slotStart.toJSDate(),
         endTime: slotEnd.toJSDate(),

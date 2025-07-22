@@ -6,7 +6,6 @@ import { generateAvailabilitySlots } from '../utils/slotGenerator.js';
 const prisma = new PrismaClient();
 const TIME_ZONE = 'Asia/Kolkata';
 
-
 const createFutureAvailability = async (req: Request, res: Response) => {
   const interviewerId = (req.user as any).id;
   const { availabilities } = req.body;
@@ -26,11 +25,14 @@ const createFutureAvailability = async (req: Request, res: Response) => {
         return res.status(400).json({ message: `Missing fields in entry: ${JSON.stringify(entry)}` });
       }
 
+      // Validate that the date is not in the past
       const entryDate = DateTime.fromISO(date, { zone: TIME_ZONE });
       if (entryDate > limitDate || entryDate < now.startOf('day')) {
         continue;
       }
 
+      console.log(`Processing availability for ${date} ${startTime}-${endTime} IST`);
+      
       const slots = generateAvailabilitySlots({ date, startTime, endTime, now });
       for (const slot of slots) {
         slotsToCreate.push({ interviewerId, ...slot });
@@ -46,14 +48,17 @@ const createFutureAvailability = async (req: Request, res: Response) => {
       skipDuplicates: true,
     });
 
-    res.status(201).json({ message: `Successfully created ${result.count} future availability slots.` });
+    res.status(201).json({ 
+      message: `Successfully created ${result.count} future availability slots.`,
+      timezone: TIME_ZONE,
+      slotsCreated: result.count
+    });
 
   } catch (error) {
     console.error("Error in createFutureAvailability:", error);
     res.status(500).json({ message: "Internal server error." });
   }
 };
-
 
 const createTodayAvailability = async (req: Request, res: Response) => {
   const interviewerId = (req.user as any).id;
@@ -75,9 +80,15 @@ const createTodayAvailability = async (req: Request, res: Response) => {
       }
 
       if (date !== todayStr) {
-        return res.status(400).json({ message: `This endpoint only accepts availability for today's date: ${todayStr}` });
+        return res.status(400).json({ 
+          message: `This endpoint only accepts availability for today's date: ${todayStr}`,
+          providedDate: date,
+          expectedDate: todayStr
+        });
       }
 
+      console.log(`Processing today's availability: ${date} ${startTime}-${endTime} IST`);
+      
       const slots = generateAvailabilitySlots({ date, startTime, endTime, now });
       for (const slot of slots) {
         slotsToCreate.push({ interviewerId, ...slot });
@@ -93,13 +104,18 @@ const createTodayAvailability = async (req: Request, res: Response) => {
       skipDuplicates: true,
     });
 
-    res.status(201).json({ message: `Successfully created ${result.count} availability slots for today.` });
+    res.status(201).json({ 
+      message: `Successfully created ${result.count} availability slots for today.`,
+      timezone: TIME_ZONE,
+      slotsCreated: result.count
+    });
 
   } catch (error) {
     console.error("Error in createTodayAvailability:", error);
     res.status(500).json({ message: "Internal server error." });
   }
 };
+
 const deleteAvailabilityByRange = async (req: Request, res: Response) => {
     const interviewerId = (req.user as any).id;
     const { startTime, endTime } = req.body; 
@@ -138,4 +154,5 @@ const deleteAvailabilityByRange = async (req: Request, res: Response) => {
         res.status(500).json({ message: "An internal server error occurred while deleting the slots." });
     }
 };
+
 export { createTodayAvailability, createFutureAvailability, deleteAvailabilityByRange };

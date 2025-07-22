@@ -52,6 +52,9 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE UNIQUE INDEX "Availability_interviewerId_startTime_key" ON "Availability"("interviewerId", "startTime");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Booking_studentEmail_key" ON "Booking"("studentEmail");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Booking_availabilityId_key" ON "Booking"("availabilityId");
 
 -- AddForeignKey

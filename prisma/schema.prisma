@@ -50,7 +50,7 @@ model Booking {
   id            String   @id @default(uuid())
   
   studentName   String
-  studentEmail  String
+  studentEmail  String   @unique  
   studentPhone  String?
 
   interviewerId String
