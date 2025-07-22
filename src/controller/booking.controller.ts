@@ -1,6 +1,6 @@
 import { PrismaClient, User, Booking } from '@prisma/client';
 import { Request, Response } from 'express';
-import { DateTime } from 'luxon'; // Add this import
+import { DateTime } from 'luxon'; 
 import { GoogleCalendarService } from '../services/GoogleCalendarService.js';
 
 const prisma = new PrismaClient();
@@ -30,9 +30,7 @@ export const getPublicAvailability = async (req: Request, res: Response) => {
             },
         });
 
-        // Convert UTC times back to IST for display
         const groupedByDate = availableSlots.reduce((acc, slot) => {
-            // Convert to IST for grouping and display
             const startTimeIST = DateTime.fromJSDate(slot.startTime).setZone(TIME_ZONE);
             const endTimeIST = DateTime.fromJSDate(slot.endTime).setZone(TIME_ZONE);
             
@@ -46,7 +44,7 @@ export const getPublicAvailability = async (req: Request, res: Response) => {
                 id: slot.id,
                 startTime: startTimeIST.toFormat('HH:mm'),
                 endTime: endTimeIST.toFormat('HH:mm'),
-                startTimeISO: slot.startTime.toISOString(), // Keep original UTC time for booking
+                startTimeISO: slot.startTime.toISOString(), 
                 endTimeISO: slot.endTime.toISOString(),
                 displayTime: `${startTimeIST.toFormat('HH:mm')} - ${endTimeIST.toFormat('HH:mm')} IST`
             });
@@ -66,27 +64,52 @@ export const getPublicAvailability = async (req: Request, res: Response) => {
     }
 };
 
-// Rest of your createBooking function remains the same
+
 export const createBooking = async (req: Request, res: Response) => {
     const { startTime, studentName, studentEmail, studentPhone } = req.body;
 
-    if (!startTime || !studentName || !studentEmail) {
-        return res.status(400).json({ message: "startTime, studentName, and studentEmail are required." });
+    if (!startTime || !studentName || !studentEmail || !studentPhone) {
+        return res.status(400).json({ 
+            message: "startTime, studentName, studentEmail, and studentPhone are required." 
+        });
     }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(studentEmail)) {
+        return res.status(400).json({ message: "Please provide a valid email address." });
+    }
+
+    const phoneRegex = /^[\+]?[\d\s\-\(\)]{10,}$/;
+    if (!phoneRegex.test(studentPhone)) {
+        return res.status(400).json({ message: "Please provide a valid phone number." });
+    }
+
+    const sanitizedData = {
+        studentName: studentName.trim(),
+        studentEmail: studentEmail.toLowerCase().trim(),
+        studentPhone: studentPhone.trim()
+    };
 
     const slotStartTime = new Date(startTime);
     if (isNaN(slotStartTime.getTime())) {
-        return res.status(400).json({ message: "Invalid startTime format." });
+        return res.status(400).json({ message: "Invalid startTime format. Please provide a valid ISO date string." });
+    }
+
+    const now = DateTime.now().setZone(TIME_ZONE);
+    const slotDateTime = DateTime.fromJSDate(slotStartTime).setZone(TIME_ZONE);
+    
+    if (slotDateTime < now) {
+        return res.status(400).json({ message: "Cannot book a slot in the past. Please select a future time slot." });
     }
 
     let newBooking: Booking;
     let chosenInterviewer: User;
+    let meetingLink = "https://meet.google.com/new"; 
 
     try {
-        // Check if student has ANY booking (past, present, or future)
         const existingBooking = await prisma.booking.findFirst({
             where: {
-                studentEmail: studentEmail,
+                studentEmail: sanitizedData.studentEmail,
             },
             include: {
                 interviewer: {
@@ -115,7 +138,7 @@ export const createBooking = async (req: Request, res: Response) => {
                 statusMessage = `You have an interview scheduled for today at ${bookingDateTime.toFormat('HH:mm')} IST`;
             }
             
-            return res.status(400).json({ 
+            return res.status(409).json({ 
                 message: `Only one interview booking is allowed per student. ${statusMessage} with ${existingBooking.interviewer.name}.`,
                 existingBooking: {
                     id: existingBooking.id,
@@ -127,8 +150,6 @@ export const createBooking = async (req: Request, res: Response) => {
                 canBook: false
             });
         }
-
-        // Proceed with normal booking flow if no existing booking found
         const availableInterviewers = await prisma.availability.findMany({
             where: {
                 startTime: slotStartTime,
@@ -140,7 +161,9 @@ export const createBooking = async (req: Request, res: Response) => {
         });
 
         if (availableInterviewers.length === 0) {
-            return res.status(404).json({ message: "Sorry, this time slot is no longer available. Please select another time." });
+            return res.status(404).json({ 
+                message: "Sorry, this time slot is no longer available. Please select another time." 
+            });
         }
 
         const randomIndex = Math.floor(Math.random() * availableInterviewers.length);
@@ -148,9 +171,8 @@ export const createBooking = async (req: Request, res: Response) => {
         chosenInterviewer = chosenAvailability.interviewer;
 
         newBooking = await prisma.$transaction(async (tx) => {
-            // Double-check for existing booking within transaction
             const doubleCheckBooking = await tx.booking.findFirst({
-                where: { studentEmail: studentEmail }
+                where: { studentEmail: sanitizedData.studentEmail }
             });
 
             if (doubleCheckBooking) {
@@ -172,9 +194,9 @@ export const createBooking = async (req: Request, res: Response) => {
 
             return tx.booking.create({
                 data: {
-                    studentName,
-                    studentEmail,
-                    studentPhone,
+                    studentName: sanitizedData.studentName,
+                    studentEmail: sanitizedData.studentEmail,
+                    studentPhone: sanitizedData.studentPhone,
                     interviewerId: chosenInterviewer.id,
                     availabilityId: chosenAvailability.id,
                     startTime: chosenAvailability.startTime,
@@ -183,13 +205,15 @@ export const createBooking = async (req: Request, res: Response) => {
             });
         });
 
-        // Calendar event creation
+        let calendarSuccess = false;
+        let calendarErrorMessage = "";
+
         try {
             const calendarService = new GoogleCalendarService(chosenInterviewer.id);
             
             const connectionWorks = await calendarService.testConnection();
             if (!connectionWorks) {
-                throw new Error(`Calendar connection failed. Interviewer ${chosenInterviewer.id} needs to reconnect their calendar.`);
+                throw new Error(`Calendar connection failed for interviewer ${chosenInterviewer.name}`);
             }
             
             const calendarEvent = await calendarService.createEvent({
@@ -202,32 +226,34 @@ export const createBooking = async (req: Request, res: Response) => {
                 interviewerName: chosenInterviewer.name,
             });
 
+            meetingLink = extractMeetingLink(calendarEvent);
+
             await prisma.booking.update({
                 where: { id: newBooking.id },
                 data: { googleEventId: calendarEvent.id },
             });
 
-            console.log(`✅ Calendar event created successfully for booking ${newBooking.id}`);
+            calendarSuccess = true;
+            console.log(`✅ Calendar event created successfully for booking ${newBooking.id} with meeting link: ${meetingLink}`);
 
-        } catch (calendarError: any) {
+        } catch (calendarError: unknown) {
+            calendarErrorMessage = calendarError instanceof Error ? calendarError.message : "Unknown calendar error";
             console.error(`CRITICAL: Booking ${newBooking.id} created, but failed to create Google Calendar event.`, calendarError);
             
-            return res.status(500).json({ 
-                message: "Booking confirmed, but failed to send calendar invite. Please contact the interviewer. Reason: " + calendarError.message,
-                booking: {
-                    ...newBooking,
-                    startTimeIST: DateTime.fromJSDate(newBooking.startTime).setZone(TIME_ZONE).toFormat('dd MMMM yyyy, HH:mm'),
-                    timezone: TIME_ZONE
-                },
-                requiresInterviewerAction: true,
-                calendarError: true
-            });
+            calendarSuccess = false;
         }
 
         const bookingDateTime = DateTime.fromJSDate(newBooking.startTime).setZone(TIME_ZONE);
         
-        res.status(201).json({ 
-            message: "Booking successful! This is your only allowed interview booking. A calendar invitation has been sent.", 
+        let responseMessage = "Booking successful! This is your only allowed interview booking.";
+        if (calendarSuccess) {
+            responseMessage += " A calendar invitation has been sent.";
+        } else {
+            responseMessage += " However, there was an issue sending the calendar invitation.";
+        }
+
+        const response = {
+            message: responseMessage,
             booking: {
                 ...newBooking,
                 startTimeIST: bookingDateTime.toFormat('dd MMMM yyyy, HH:mm'),
@@ -238,11 +264,50 @@ export const createBooking = async (req: Request, res: Response) => {
                 name: chosenInterviewer.name,
                 email: chosenInterviewer.email
             },
-            importantNote: "You cannot book another interview or modify this booking. Please ensure you attend at the scheduled time."
-        });
+            meetingLink: meetingLink,
+            importantNote: "You cannot book another interview or modify this booking. Please ensure you attend at the scheduled time.",
+            calendarError: !calendarSuccess,
+            ...(calendarErrorMessage && { calendarErrorDetails: calendarErrorMessage })
+        };
 
-    } catch (error: any) {
+        const statusCode = calendarSuccess ? 201 : 206;
+        res.status(statusCode).json(response);
+
+    } catch (error: unknown) {
         console.error("Booking failed during database transaction:", error);
-        res.status(500).json({ message: error.message || "An unexpected error occurred during booking." });
+        
+        if (error instanceof Error) {
+            if (error.message.includes("slot was just booked")) {
+                return res.status(409).json({ message: error.message });
+            }
+            if (error.message.includes("Only one booking per student")) {
+                return res.status(409).json({ message: error.message });
+            }
+        }
+        
+        const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred during booking.";
+        res.status(500).json({ message: errorMessage });
     }
 };
+
+function extractMeetingLink(calendarEvent: any): string {
+    if (calendarEvent.hangoutLink) {
+        return calendarEvent.hangoutLink;
+    }
+    
+    if (calendarEvent.conferenceData?.entryPoints) {
+        const videoEntry = calendarEvent.conferenceData.entryPoints.find(
+            (entry: any) => entry.entryPointType === 'video'
+        );
+        if (videoEntry?.uri) {
+            return videoEntry.uri;
+        }
+    }
+    
+    if (calendarEvent.location && calendarEvent.location.includes('meet.google.com')) {
+        return calendarEvent.location;
+    }
+    
+    const roomId = Math.random().toString(36).substring(2, 15);
+    return `https://meet.google.com/${roomId}`;
+}
