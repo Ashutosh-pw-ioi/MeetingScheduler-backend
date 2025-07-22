@@ -15,12 +15,38 @@ const checkUser = (req: Request, res: Response) => {
   }
 };
 
-const checkCalendarAccess = (req: Request, res: Response) => {
+const checkCalendarAccess = async (req: Request, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
-  const hasCalendarAccess = !!(req.user.accessToken && req.user.calendarConnected);
+  const hasCalendarAccess = !!(req.user.refreshToken && req.user.calendarConnected);
+  
+  // Test the connection if user claims to have calendar access
+  if (hasCalendarAccess) {
+    try {
+      const { GoogleCalendarService } = await import('../services/GoogleCalendarService.js');
+      const calendarService = new GoogleCalendarService(req.user.id);
+      const connectionWorks = await calendarService.testConnection();
+      
+      if (!connectionWorks) {
+        return res.json({
+          hasCalendarAccess: false,
+          needsCalendarPermission: true,
+          calendarAuthUrl: '/auth/google/calendar',
+          error: 'Calendar connection test failed. Please reconnect.'
+        });
+      }
+    } catch (error) {
+      console.error('Calendar test failed:', error);
+      return res.json({
+        hasCalendarAccess: false,
+        needsCalendarPermission: true,
+        calendarAuthUrl: '/auth/google/calendar',
+        error: 'Calendar connection test failed. Please reconnect.'
+      });
+    }
+  }
   
   res.json({
     hasCalendarAccess,
@@ -45,13 +71,13 @@ const logoutUser = (req: Request, res: Response) => {
 };
 
 const redirectUser = (req: Request, res: Response) => {
-  // Check if user has calendar access
   const user = req.user as any;
-  const hasCalendarAccess = !!(user?.accessToken && user?.calendarConnected);
+  const hasCalendarAccess = !!(user?.refreshToken && user?.calendarConnected);
   
   if (hasCalendarAccess) {
     res.redirect(`${process.env.ORIGIN}/dashboard?setup=complete`);
   } else {
+    // Redirect to a page that prompts for calendar permission
     res.redirect(`${process.env.ORIGIN}/setup/calendar`);
   }
 };

@@ -6,53 +6,155 @@ const prisma = new PrismaClient();
 
 export class GoogleCalendarService {
     private oauth2Client;
-    private userId: string;
+    private interviewerId: string;
 
-    constructor(userId: string) {
+    constructor(interviewerId: string) {
+        this.interviewerId = interviewerId;
         this.oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_CLIENT_ID!,
             process.env.GOOGLE_CLIENT_SECRET!,
-            "http://localhost:8000/auth/google/callback"
+            process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8000/auth/google/callback'
         );
-        this.userId = userId;
     }
 
-    async authorize() {
-        const user = await prisma.user.findUnique({ where: { id: this.userId } });
-        if (!user || !user.accessToken || !user.refreshToken) {
-            throw new Error("User authentication required");
+    private async authorize() {
+        const interviewer = await prisma.user.findUnique({
+            where: { id: this.interviewerId },
+            select: { 
+                refreshToken: true, 
+                accessToken: true,
+                calendarConnected: true 
+            }
+        });
+
+        if (!interviewer || !interviewer.refreshToken || !interviewer.calendarConnected) {
+            throw new Error(`Cannot create event: Interviewer ${this.interviewerId} has not connected their calendar or granted offline access.`);
         }
 
-        const accessToken = decrypt(user.accessToken);
-        const refreshToken = decrypt(user.refreshToken);
+        const refreshToken = decrypt(interviewer.refreshToken);
+        const accessToken = interviewer.accessToken ? decrypt(interviewer.accessToken) : null;
 
-        this.oauth2Client.setCredentials({
-            access_token: accessToken,
+        this.oauth2Client.setCredentials({ 
             refresh_token: refreshToken,
+            access_token: accessToken
         });
 
+        // Handle token refresh
+        this.oauth2Client.on('tokens', async (tokens) => {
+            if (tokens.access_token) {
+                const encryptedAccessToken = encrypt(tokens.access_token);
+                await prisma.user.update({
+                    where: { id: this.interviewerId },
+                    data: { accessToken: encryptedAccessToken }
+                });
+            }
+        });
+    }
+
+    async createEvent(eventDetails: {
+        startTime: Date;
+        endTime: Date;
+        studentName: string;
+        studentEmail: string;
+        studentPhone?: string;
+        interviewerEmail: string;
+        interviewerName: string;
+    }) {
         try {
-            await this.oauth2Client.getTokenInfo(accessToken);
-        } catch (error) {
-            await this.oauth2Client.getAccessToken();
+            await this.authorize();
+
+            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+
+            const eventDescription = `
+30-minute interview session.
+Interviewer: ${eventDetails.interviewerName} (${eventDetails.interviewerEmail})
+Student: ${eventDetails.studentName} (${eventDetails.studentEmail})
+Student Phone: ${eventDetails.studentPhone || 'Not provided'}
+
+This is an automated booking. Please contact support if you need to reschedule.
+            `.trim();
+
+            const event = {
+                summary: `Interview: ${eventDetails.interviewerName} and ${eventDetails.studentName}`,
+                description: eventDescription,
+                start: {
+                    dateTime: eventDetails.startTime.toISOString(),
+                    timeZone: 'Asia/Kolkata',
+                },
+                end: {
+                    dateTime: eventDetails.endTime.toISOString(),
+                    timeZone: 'Asia/Kolkata',
+                },
+                attendees: [
+                    { 
+                        email: eventDetails.interviewerEmail,
+                        responseStatus: 'accepted'
+                    },
+                    { 
+                        email: eventDetails.studentEmail,
+                        responseStatus: 'needsAction'
+                    }
+                ],
+                reminders: {
+                    useDefault: false,
+                    overrides: [
+                        { method: 'email', minutes: 24 * 60 }, // 24 hours
+                        { method: 'email', minutes: 60 },      // 1 hour
+                        { method: 'popup', minutes: 10 }       // 10 minutes
+                    ],
+                },
+                conferenceData: {
+                    createRequest: {
+                        requestId: `meet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                        conferenceSolutionKey: {
+                            type: "hangoutsMeet"
+                        }
+                    }
+                },
+                guestsCanModify: false,
+                guestsCanInviteOthers: false,
+                guestsCanSeeOtherGuests: true
+            };
+
+            const createdEvent = await calendar.events.insert({
+                calendarId: 'primary',
+                conferenceDataVersion: 1,
+                sendUpdates: 'all',
+                requestBody: event,
+            });
+
+            return createdEvent.data;
+
+        } catch (error: any) {
+            console.error('Calendar Service Error:', error);
+            
+            // Handle specific OAuth errors
+            if (error.code === 401 || error.message.includes('invalid_grant')) {
+                throw new Error(`Calendar authorization expired. Interviewer ${this.interviewerId} needs to reconnect their calendar.`);
+            }
+            
+            if (error.code === 403) {
+                throw new Error(`Calendar access denied. Interviewer ${this.interviewerId} has not granted sufficient calendar permissions.`);
+            }
+
+            throw new Error(`Failed to create calendar event: ${error.message}`);
         }
     }
 
-    async getCalendars() {
-        await this.authorize();
-        const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
-        const res = await calendar.calendarList.list();
-        return res.data.items;
+    // Method to test calendar connection
+    async testConnection() {
+        try {
+            await this.authorize();
+            const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+            
+            // Try to list calendars to test connection
+            await calendar.calendarList.list({
+                maxResults: 1
+            });
+            
+            return true;
+        } catch (error) {
+            return false;
+        }
     }
-
-    async createEvent(calendarId: string, eventDetails: any) {
-        await this.authorize();
-        const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
-        const res = await calendar.events.insert({
-            calendarId,
-            requestBody: eventDetails,
-        });
-        return res.data;
-    }
-
 }

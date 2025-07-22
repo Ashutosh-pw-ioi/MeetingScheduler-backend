@@ -5,6 +5,8 @@ import './auth/google.js';
 import authRoutes from './routes/auth.route.js';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import availabilityRoutes from './routes/availability.route.js';
+import bookingRoutes from './routes/bookingRoutes.routes.js';
 
 dotenv.config();
 
@@ -31,11 +33,9 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 app.use('/auth', authRoutes);
-app.use('/api/user', authRoutes);
+app.use('/api/availability', availabilityRoutes); 
+app.use('/api/booking', bookingRoutes);
 
-app.get('/', (req, res) => {
-    res.send('<a href="/auth/google">Login with Google</a>');
-});
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
