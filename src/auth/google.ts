@@ -12,7 +12,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL: 'http://localhost:8000/auth/google/callback',
+      callbackURL:'http://localhost:8000/auth/google/callback',
     },
     async (
       accessToken: string,
@@ -21,8 +21,12 @@ passport.use(
       done: VerifyCallback
     ) => {
       try {
+        // Since we're requesting calendar scopes in the strategy configuration,
+        // if we get a refresh token, we can assume calendar permissions were granted
+        const hasCalendarAccess = !!refreshToken;
+
         if (!refreshToken) {
-          console.warn(`No refresh token received for ${profile.emails?.[0]?.value}`);
+          console.warn(`No refresh token received for ${profile.emails?.[0]?.value}. User may have denied calendar permissions or already authorized this app.`);
         }
 
         const encryptedAccess = encrypt(accessToken);
@@ -34,7 +38,7 @@ passport.use(
           avatarUrl: profile.photos?.[0]?.value || null,
           accessToken: encryptedAccess,
           refreshToken: encryptedRefresh,
-          calendarConnected: !!encryptedRefresh,
+          calendarConnected: hasCalendarAccess,
           lastLogin: new Date(),
         };
 
@@ -47,7 +51,9 @@ passport.use(
           },
         });
 
+        console.log(`User ${user.email} authenticated. Calendar connected: ${user.calendarConnected}`);
         return done(null, user);
+
       } catch (err) {
         console.error('Google Strategy Error:', err);
         return done(err as Error, undefined);
@@ -55,22 +61,6 @@ passport.use(
     }
   )
 );
-
-export const googleAuth = passport.authenticate('google', {
-  scope: [
-    'profile',
-    'email',
-    'https://www.googleapis.com/auth/calendar.events',
-  ],
-  accessType: 'offline',
-  prompt: 'consent',
-});
-
-export const googleAuthCallback = passport.authenticate('google', {
-  failureRedirect: '/login?error=google_auth_failed',
-  session: true,
-});
-
 
 passport.serializeUser((user: any, done) => {
   done(null, user.id);

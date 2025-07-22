@@ -1,10 +1,11 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, User, Booking } from '@prisma/client';
 import { Request, Response } from 'express';
-import { GoogleCalendarService } from '../services/GoogleCalendarService.js' 
+import { GoogleCalendarService } from '../services/GoogleCalendarService.js'; // Adjust path as needed
 
 const prisma = new PrismaClient();
 
-const getPublicAvailability = async (req: Request, res: Response) => {
+// Your getPublicAvailability function remains the same...
+export const getPublicAvailability = async (req: Request, res: Response) => {
     try {
         const now = new Date();
         const fifteenDaysFromNow = new Date();
@@ -28,14 +29,13 @@ const getPublicAvailability = async (req: Request, res: Response) => {
         });
 
         const groupedByDate = availableSlots.reduce((acc, slot) => {
-            const date = slot.startTime.toISOString().split('T')[0]; 
+            const date = slot.startTime.toISOString().split('T')[0];
             if (!acc[date]) {
                 acc[date] = [];
             }
             acc[date].push(slot);
             return acc;
         }, {} as Record<string, typeof availableSlots>);
-
 
         res.status(200).json(groupedByDate);
     } catch (error) {
@@ -45,7 +45,7 @@ const getPublicAvailability = async (req: Request, res: Response) => {
 };
 
 
-const createBooking = async (req: Request, res: Response) => {
+export const createBooking = async (req: Request, res: Response) => {
     const { startTime, studentName, studentEmail, studentPhone } = req.body;
 
     if (!startTime || !studentName || !studentEmail) {
@@ -57,15 +57,17 @@ const createBooking = async (req: Request, res: Response) => {
         return res.status(400).json({ message: "Invalid startTime format." });
     }
 
-    try {
+    let newBooking: Booking;
+    let chosenInterviewer: User;
 
+    try {
         const availableInterviewers = await prisma.availability.findMany({
             where: {
                 startTime: slotStartTime,
                 isBooked: false,
             },
             include: {
-                interviewer: true, 
+                interviewer: true,
             },
         });
 
@@ -75,16 +77,15 @@ const createBooking = async (req: Request, res: Response) => {
 
         const randomIndex = Math.floor(Math.random() * availableInterviewers.length);
         const chosenAvailability = availableInterviewers[randomIndex];
-        const chosenInterviewer = chosenAvailability.interviewer;
+        chosenInterviewer = chosenAvailability.interviewer;
 
-        const newBooking = await prisma.$transaction(async (tx) => {
-
+        newBooking = await prisma.$transaction(async (tx) => {
             const lockedAvailability = await tx.availability.findUnique({
                 where: { id: chosenAvailability.id },
             });
 
             if (!lockedAvailability || lockedAvailability.isBooked) {
-                throw new Error("This slot was booked by another user. Please try again.");
+                throw new Error("This slot was just booked by another user. Please try again.");
             }
 
             await tx.availability.update({
@@ -105,28 +106,47 @@ const createBooking = async (req: Request, res: Response) => {
             });
         });
 
-        const calendarService = new GoogleCalendarService(chosenInterviewer.id);
-        const calendarEvent = await calendarService.createEvent({
-            startTime: newBooking.startTime,
-            endTime: newBooking.endTime,
-            studentName: newBooking.studentName,
-            studentEmail: newBooking.studentEmail,
-            studentPhone: newBooking.studentPhone || undefined,
-            interviewerEmail: chosenInterviewer.email,
-            interviewerName: chosenInterviewer.name,
-        });
 
-        await prisma.booking.update({
-            where: { id: newBooking.id },
-            data: { googleEventId: calendarEvent.id },
-        });
+        try {
+            const calendarService = new GoogleCalendarService(chosenInterviewer.id);
 
+            // Test connection first
+            const connectionWorks = await calendarService.testConnection();
+            if (!connectionWorks) {
+                throw new Error(`Calendar connection failed. Interviewer ${chosenInterviewer.id} needs to reconnect their calendar.`);
+            }
+
+            const calendarEvent = await calendarService.createEvent({
+                startTime: newBooking.startTime,
+                endTime: newBooking.endTime,
+                studentName: newBooking.studentName,
+                studentEmail: newBooking.studentEmail,
+                studentPhone: newBooking.studentPhone || undefined,
+                interviewerEmail: chosenInterviewer.email,
+                interviewerName: chosenInterviewer.name,
+            });
+
+            await prisma.booking.update({
+                where: { id: newBooking.id },
+                data: { googleEventId: calendarEvent.id },
+            });
+
+            console.log(`✅ Calendar event created successfully for booking ${newBooking.id}`);
+
+        } catch (calendarError: any) {
+            console.error(`CRITICAL: Booking ${newBooking.id} created, but failed to create Google Calendar event.`, calendarError);
+
+            return res.status(500).json({
+                message: "Booking confirmed, but failed to send calendar invite. Please contact the interviewer to reconnect their calendar. Reason: " + calendarError.message,
+                booking: newBooking,
+                requiresInterviewerAction: true,
+                calendarError: true
+            });
+        }
         res.status(201).json({ message: "Booking successful! A calendar invitation has been sent.", booking: newBooking });
 
     } catch (error: any) {
-        console.error("Booking failed:", error);
+        console.error("Booking failed during database transaction:", error);
         res.status(500).json({ message: error.message || "An unexpected error occurred during booking." });
     }
 };
-
-export  { getPublicAvailability, createBooking };
