@@ -370,3 +370,98 @@ export const getTodaySummary = async (req: Request, res: Response) => {
     res.status(500).json({ message: "An internal server error occurred." });
   }
 };
+
+export const getAllBookedCountsWeekly = async (req: Request, res: Response) => {
+  const interviewerId = (req.user as Express.User).id;
+
+  try {
+    const now = DateTime.now().setZone(TIME_ZONE);
+    
+    // Get the start of current week (Monday)
+    const startOfWeek = now.startOf('week');
+    
+    // Get bookings for the current week
+    const weekStart = startOfWeek.toJSDate();
+    const weekEnd = startOfWeek.plus({ days: 7 }).toJSDate();
+
+    console.log(`Fetching weekly booking counts for interviewer ${interviewerId}`);
+    console.log(`Week range: ${startOfWeek.toFormat('yyyy-MM-dd')} to ${startOfWeek.plus({ days: 6 }).toFormat('yyyy-MM-dd')}`);
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        interviewerId: interviewerId,
+        startTime: {
+          gte: weekStart,
+          lt: weekEnd,
+        },
+      },
+      select: {
+        startTime: true,
+      },
+      orderBy: {
+        startTime: 'asc',
+      },
+    });
+
+    console.log(`Found ${bookings.length} bookings for the week`);
+
+    // Initialize weekly data structure
+    const weeklyData = [
+      { day: 'Mon', interviews: 0, fullDay: 'Monday' },
+      { day: 'Tue', interviews: 0, fullDay: 'Tuesday' },
+      { day: 'Wed', interviews: 0, fullDay: 'Wednesday' },
+      { day: 'Thu', interviews: 0, fullDay: 'Thursday' },
+      { day: 'Fri', interviews: 0, fullDay: 'Friday' },
+      { day: 'Sat', interviews: 0, fullDay: 'Saturday' },
+      { day: 'Sun', interviews: 0, fullDay: 'Sunday' },
+    ];
+
+    // Count bookings by day of week
+    bookings.forEach((booking) => {
+      const bookingDate = DateTime.fromJSDate(booking.startTime, { zone: TIME_ZONE });
+      const dayOfWeek = bookingDate.weekday; // Monday = 1, Sunday = 7
+      
+      // Map luxon weekday (1-7) to array index (0-6)
+      const dayIndex = dayOfWeek - 1;
+      
+      if (dayIndex >= 0 && dayIndex < 7) {
+        weeklyData[dayIndex].interviews += 1;
+      }
+    });
+
+    // Add metadata about the week
+    const weekInfo = {
+      weekStart: startOfWeek.toFormat('yyyy-MM-dd'),
+      weekEnd: startOfWeek.plus({ days: 6 }).toFormat('yyyy-MM-dd'),
+      weekNumber: startOfWeek.weekNumber,
+      year: startOfWeek.year,
+      totalBookings: bookings.length,
+    };
+
+    const response = {
+      weeklyTrends: weeklyData,
+      weekInfo: weekInfo,
+      summary: {
+        totalInterviews: bookings.length,
+        averagePerDay: Math.round((bookings.length / 7) * 10) / 10,
+        mostActiveDay: weeklyData.reduce((max, current) => 
+          current.interviews > max.interviews ? current : max
+        ),
+        leastActiveDay: weeklyData.reduce((min, current) => 
+          current.interviews < min.interviews ? current : min
+        ),
+      }
+    };
+
+    console.log('Weekly trends response:', response);
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    console.error("Error fetching weekly booking counts:", error);
+    res.status(500).json({ 
+      message: "An internal server error occurred while fetching weekly booking trends.",
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};

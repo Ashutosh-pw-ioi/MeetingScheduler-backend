@@ -6,7 +6,8 @@ import {
     deleteAvailabilityByRange, 
     getAllAvailability,
     getAllMeetings,
-    getTodaySummary
+    getTodaySummary,
+    getAllBookedCountsWeekly
 } from '../controller/availability.controller.js';
 
 const availabilityRoutes = express.Router();
@@ -18,6 +19,7 @@ availabilityRoutes.delete('/range', isAuthenticated, deleteAvailabilityByRange);
 availabilityRoutes.get('/all', isAuthenticated, getAllAvailability); 
 availabilityRoutes.get('/allMeetings', isAuthenticated, getAllMeetings);
 availabilityRoutes.get('/summary/today', isAuthenticated, getTodaySummary);
+availabilityRoutes.get('/getAllBookedCountsWeekly', isAuthenticated, getAllBookedCountsWeekly); 
 
 
 export default availabilityRoutes;

@@ -70,15 +70,17 @@ const logoutUser = (req: Request, res: Response) => {
   });
 };
 
+// Updated redirect function - this is the key change
 const redirectUser = (req: Request, res: Response) => {
   const user = req.user as any;
   const hasCalendarAccess = !!(user?.refreshToken && user?.calendarConnected);
   
   if (hasCalendarAccess) {
-    res.redirect(`${process.env.ORIGIN}/dashboard?setup=complete`);
+    // Redirect to interviewer overview page instead of dashboard
+    res.redirect(`${process.env.ORIGIN}/interviewer?setup=complete`);
   } else {
-    // Redirect to a page that prompts for calendar permission
-    res.redirect(`${process.env.ORIGIN}/setup/calendar`);
+    // Redirect to interviewer overview page - calendar prompt will show there
+    res.redirect(`${process.env.ORIGIN}/interviewer?calendar=setup`);
   }
 };
 
