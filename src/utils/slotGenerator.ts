@@ -15,12 +15,13 @@ export const generateAvailabilitySlots = ({
 }) => {
   const slots: { startTime: Date; endTime: Date }[] = [];
 
-  // Create DateTime objects with explicit IST timezone
+  // Create DateTime objects with the specified timezone
   const startDateTime = DateTime.fromISO(`${date}T${startTime}`, { zone: TIME_ZONE });
   const endDateTime = DateTime.fromISO(`${date}T${endTime}`, { zone: TIME_ZONE });
 
+  // Validate the inputs
   if (!startDateTime.isValid || !endDateTime.isValid || startDateTime >= endDateTime) {
-    console.error('Invalid date/time:', { startDateTime, endDateTime });
+    console.error('Invalid date/time range provided to slot generator:', { date, startTime, endTime });
     return [];
   }
 
@@ -29,11 +30,14 @@ export const generateAvailabilitySlots = ({
   while (slotStart < endDateTime) {
     const slotEnd = slotStart.plus({ minutes: 30 });
 
-    if (slotEnd > endDateTime) break;
+    if (slotEnd > endDateTime) {
+      break; // Do not create a partial slot at the end
+    }
+
+    // Only create slots that start in the future
     if (slotStart > now) {
-      // Convert to JavaScript Date objects while preserving the timezone
       slots.push({
-        startTime: slotStart.toJSDate(),
+        startTime: slotStart.toJSDate(), // Convert to standard JS Date for Prisma
         endTime: slotEnd.toJSDate(),
       });
     }

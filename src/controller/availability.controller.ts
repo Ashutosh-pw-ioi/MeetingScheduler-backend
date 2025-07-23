@@ -6,153 +6,175 @@ import { generateAvailabilitySlots } from '../utils/slotGenerator.js';
 const prisma = new PrismaClient();
 const TIME_ZONE = 'Asia/Kolkata';
 
-const createFutureAvailability = async (req: Request, res: Response) => {
-  const interviewerId = (req.user as any).id;
+export const setAvailabilityForMultipleDays = async (req: Request, res: Response) => {
+  const interviewerId = (req.user as Express.User).id;
   const { availabilities } = req.body;
 
   if (!Array.isArray(availabilities)) {
-    return res.status(400).json({ message: "Expected 'availabilities' to be an array." });
+    return res.status(400).json({ message: "Request body must include 'availabilities', an array of daily availability." });
   }
 
   const now = DateTime.now().setZone(TIME_ZONE);
-  const limitDate = now.plus({ days: 15 });
-  const slotsToCreate: { interviewerId: string; startTime: Date; endTime: Date }[] = [];
+  const allSlotsToCreate: { interviewerId: string; startTime: Date; endTime: Date }[] = [];
+  const dateRangesToDelete: { startTime: { gte: Date, lt: Date } }[] = [];
 
-  try {
-    for (const entry of availabilities) {
-      const { date, startTime, endTime } = entry;
-      if (!date || !startTime || !endTime) {
-        return res.status(400).json({ message: `Missing fields in entry: ${JSON.stringify(entry)}` });
-      }
+  for (const dailyInfo of availabilities) {
+    const { date, timeRanges } = dailyInfo;
+    const entryDate = DateTime.fromISO(date, { zone: TIME_ZONE });
 
-      // Validate that the date is not in the past
-      const entryDate = DateTime.fromISO(date, { zone: TIME_ZONE });
-      if (entryDate > limitDate || entryDate < now.startOf('day')) {
-        continue;
-      }
-
-      console.log(`Processing availability for ${date} ${startTime}-${endTime} IST`);
-      
-      const slots = generateAvailabilitySlots({ date, startTime, endTime, now });
-      for (const slot of slots) {
-        slotsToCreate.push({ interviewerId, ...slot });
-      }
+    if (!entryDate.isValid) {
+      return res.status(400).json({ message: `Invalid date format provided: ${date}. Use 'YYYY-MM-DD'.` });
     }
+    if (entryDate < now.startOf('day')) continue;
 
-    if (slotsToCreate.length === 0) {
-      return res.status(200).json({ message: 'No valid future availability slots to create.' });
-    }
-
-    const result = await prisma.availability.createMany({
-      data: slotsToCreate,
-      skipDuplicates: true,
+    dateRangesToDelete.push({
+      startTime: {
+        gte: entryDate.startOf('day').toJSDate(),
+        lt: entryDate.endOf('day').toJSDate(),
+      }
     });
 
-    res.status(201).json({ 
-      message: `Successfully created ${result.count} future availability slots.`,
-      timezone: TIME_ZONE,
-      slotsCreated: result.count
+    for (const range of timeRanges) {
+      const generatedSlots = generateAvailabilitySlots({ date, startTime: range.startTime, endTime: range.endTime, now });
+      for (const slot of generatedSlots) {
+        allSlotsToCreate.push({ interviewerId, ...slot });
+      }
+    }
+  }
+
+  if (dateRangesToDelete.length === 0) {
+    return res.status(200).json({ message: "No valid future dates provided to update." });
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.availability.deleteMany({
+        where: {
+          interviewerId,
+          isBooked: false,
+          OR: dateRangesToDelete,
+        },
+      });
+
+      if (allSlotsToCreate.length === 0) {
+        return { count: 0 };
+      }
+
+      return tx.availability.createMany({
+        data: allSlotsToCreate,
+        skipDuplicates: true,
+      });
+    });
+
+    res.status(201).json({
+      message: `Successfully updated availability for ${dateRangesToDelete.length} day(s). Created ${result.count} new slots.`,
+      slotsCreated: result.count,
     });
 
   } catch (error) {
-    console.error("Error in createFutureAvailability:", error);
-    res.status(500).json({ message: "Internal server error." });
+    console.error("Error in setAvailabilityForMultipleDays:", error);
+    res.status(500).json({ message: "An internal server error occurred during the batch update." });
   }
 };
 
-const createTodayAvailability = async (req: Request, res: Response) => {
-  const interviewerId = (req.user as any).id;
-  const { availabilities } = req.body;
+export const updateOrSetAvailabilityForDay = async (req: Request, res: Response) => {
+  const interviewerId = (req.user as Express.User).id;
+  const { date, timeRanges } = req.body;
 
-  if (!Array.isArray(availabilities)) {
-    return res.status(400).json({ message: "Expected 'availabilities' to be an array." });
+  if (!date || !Array.isArray(timeRanges)) {
+    return res.status(400).json({ message: "Request body must include 'date' (string) and 'timeRanges' (array)." });
+  }
+
+  const entryDate = DateTime.fromISO(date, { zone: TIME_ZONE });
+  if (!entryDate.isValid) {
+    return res.status(400).json({ message: `Invalid date format: ${date}. Please use 'YYYY-MM-DD'.` });
   }
 
   const now = DateTime.now().setZone(TIME_ZONE);
-  const todayStr = now.toFormat('yyyy-MM-dd');
+  if (entryDate < now.startOf('day')) {
+    return res.status(400).json({ message: "Cannot set availability for a past date." });
+  }
+
   const slotsToCreate: { interviewerId: string; startTime: Date; endTime: Date }[] = [];
+  for (const range of timeRanges) {
+    if (!range.startTime || !range.endTime) {
+      return res.status(400).json({ message: `Invalid time range provided: ${JSON.stringify(range)}` });
+    }
+    const generatedSlots = generateAvailabilitySlots({ date, startTime: range.startTime, endTime: range.endTime, now });
+    for (const slot of generatedSlots) {
+      slotsToCreate.push({ interviewerId, ...slot });
+    }
+  }
 
   try {
-    for (const entry of availabilities) {
-      const { date, startTime, endTime } = entry;
-      if (!date || !startTime || !endTime) {
-        return res.status(400).json({ message: `Missing fields in entry: ${JSON.stringify(entry)}` });
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.availability.deleteMany({
+        where: {
+          interviewerId,
+          isBooked: false,
+          startTime: {
+            gte: entryDate.startOf('day').toJSDate(),
+            lt: entryDate.endOf('day').toJSDate(),
+          },
+        },
+      });
+
+      if (slotsToCreate.length === 0) {
+        return { count: 0 };
       }
 
-      if (date !== todayStr) {
-        return res.status(400).json({ 
-          message: `This endpoint only accepts availability for today's date: ${todayStr}`,
-          providedDate: date,
-          expectedDate: todayStr
-        });
-      }
-
-      console.log(`Processing today's availability: ${date} ${startTime}-${endTime} IST`);
-      
-      const slots = generateAvailabilitySlots({ date, startTime, endTime, now });
-      for (const slot of slots) {
-        slotsToCreate.push({ interviewerId, ...slot });
-      }
-    }
-
-    if (slotsToCreate.length === 0) {
-      return res.status(200).json({ message: 'No valid time slots to create for today (possibly all in the past).' });
-    }
-
-    const result = await prisma.availability.createMany({
-      data: slotsToCreate,
-      skipDuplicates: true,
+      return await tx.availability.createMany({
+        data: slotsToCreate,
+        skipDuplicates: true,
+      });
     });
 
-    res.status(201).json({ 
-      message: `Successfully created ${result.count} availability slots for today.`,
-      timezone: TIME_ZONE,
-      slotsCreated: result.count
+    res.status(201).json({
+      message: `Successfully set availability for ${date}. Created ${result.count} new slots.`,
+      slotsCreated: result.count,
     });
 
   } catch (error) {
-    console.error("Error in createTodayAvailability:", error);
-    res.status(500).json({ message: "Internal server error." });
+    console.error("Error in updateOrSetAvailabilityForDay:", error);
+    res.status(500).json({ message: "An internal server error occurred while updating availability." });
   }
 };
 
-const deleteAvailabilityByRange = async (req: Request, res: Response) => {
-    const interviewerId = (req.user as any).id;
-    const { startTime, endTime } = req.body; 
+export const deleteAvailabilityByRange = async (req: Request, res: Response) => {
+  const interviewerId = (req.user as Express.User).id;
+  const { startTime, endTime } = req.body;
 
-    if (!startTime || !endTime) {
-        return res.status(400).json({ message: "Both 'startTime' and 'endTime' strings are required in the request body." });
+  if (!startTime || !endTime) {
+    return res.status(400).json({ message: "Both 'startTime' and 'endTime' ISO strings are required." });
+  }
+
+  try {
+    const slotStartTime = new Date(startTime);
+    const slotEndTime = new Date(endTime);
+
+    if (isNaN(slotStartTime.getTime()) || isNaN(slotEndTime.getTime())) {
+      return res.status(400).json({ message: "Invalid date format. Please use full ISO 8601 date strings." });
     }
 
-    try {
-        const slotStartTime = new Date(startTime);
-        const slotEndTime = new Date(endTime);
+    const result = await prisma.availability.deleteMany({
+      where: {
+        interviewerId,
+        isBooked: false,
+        startTime: {
+          gte: slotStartTime,
+          lt: slotEndTime,
+        },
+      },
+    });
 
-        if (isNaN(slotStartTime.getTime()) || isNaN(slotEndTime.getTime())) {
-            return res.status(400).json({ message: "Invalid date format. Please use full ISO 8601 date strings for startTime and endTime." });
-        }
-
-        const result = await prisma.availability.deleteMany({
-            where: {
-                interviewerId: interviewerId,
-                isBooked: false, 
-                startTime: {
-                    gte: slotStartTime, 
-                    lt: slotEndTime,    
-                },
-            },
-        });
-
-        if (result.count === 0) {
-            return res.status(404).json({ message: `No unbooked slots were found in the specified time range to delete.` });
-        }
-
-        res.status(200).json({ message: `Successfully deleted ${result.count} unbooked slots.` });
-
-    } catch (error) {
-        console.error("Error deleting availability range:", error);
-        res.status(500).json({ message: "An internal server error occurred while deleting the slots." });
+    if (result.count === 0) {
+      return res.status(404).json({ message: `No unbooked slots were found in the specified time range to delete.` });
     }
+
+    res.status(200).json({ message: `Successfully deleted ${result.count} unbooked slots.` });
+
+  } catch (error) {
+    console.error("Error deleting availability range:", error);
+    res.status(500).json({ message: "An internal server error occurred." });
+  }
 };
-
-export { createTodayAvailability, createFutureAvailability, deleteAvailabilityByRange };

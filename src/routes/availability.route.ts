@@ -1,11 +1,17 @@
 import express from 'express';
 import { isAuthenticated } from '../middleware/auth.middleware.js';
-import { createFutureAvailability, createTodayAvailability, deleteAvailabilityByRange } from '../controller/availability.controller.js';
+import { 
+    setAvailabilityForMultipleDays,
+    updateOrSetAvailabilityForDay, 
+    deleteAvailabilityByRange 
+} from '../controller/availability.controller.js';
 
 const availabilityRoutes = express.Router();
 
-availabilityRoutes.post('/today',isAuthenticated,createTodayAvailability); 
-availabilityRoutes.post('/future', isAuthenticated, createFutureAvailability);
-availabilityRoutes.delete('/delete', isAuthenticated, deleteAvailabilityByRange);
+
+availabilityRoutes.post('/batch-set', isAuthenticated, setAvailabilityForMultipleDays);
+availabilityRoutes.post('/day', isAuthenticated, updateOrSetAvailabilityForDay);
+availabilityRoutes.delete('/range', isAuthenticated, deleteAvailabilityByRange);
+
 
 export default availabilityRoutes;
