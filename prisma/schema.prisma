@@ -47,21 +47,22 @@ model Availability {
 
 
 model Booking {
-  id            String   @id @default(uuid())
+  id              String    @id @default(uuid())
   
-  studentName   String
-  studentEmail  String   @unique  
-  studentPhone  String?
+  studentName     String
+  studentEmail    String    @unique
+  studentPhone    String?
 
-  interviewerId String
-  availabilityId String  @unique 
+  interviewerId   String
+  availabilityId  String    @unique 
   
-  startTime     DateTime
-  endTime       DateTime
-  googleEventId String? 
+  startTime       DateTime
+  endTime         DateTime
+  googleEventId   String?
+  meetingLink     String?  
 
-  interviewer   User     @relation("InterviewerBookings", fields: [interviewerId], references: [id])
-  availability  Availability @relation(fields: [availabilityId], references: [id])
+  interviewer     User      @relation("InterviewerBookings", fields: [interviewerId], references: [id])
+  availability    Availability @relation(fields: [availabilityId], references: [id])
 
-  createdAt     DateTime @default(now())
+  createdAt       DateTime  @default(now())
 }

@@ -2,9 +2,19 @@ import { PrismaClient } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { Request, Response } from 'express';
 import { generateAvailabilitySlots } from '../utils/slotGenerator.js';
+interface FormattedMeeting {
+  student_name: string;
+  student_email: string;
+  student_phone: string | null;
+  scheduled_date: string;
+  scheduled_time: string;
+  meeting_link: string | null;
+}
 
 const prisma = new PrismaClient();
 const TIME_ZONE = 'Asia/Kolkata';
+
+
 
 export const setAvailabilityForMultipleDays = async (req: Request, res: Response) => {
   const interviewerId = (req.user as Express.User).id;
@@ -261,3 +271,54 @@ export const getAllAvailability = async (req: Request, res: Response) => {
   }
 };
 
+export const getAllMeetings = async (req: Request, res: Response) => {
+  const interviewerId = (req.user as Express.User).id;
+
+  try {
+    const now = DateTime.now().setZone(TIME_ZONE);
+    const todayStart = now.startOf('day');
+
+    const bookings = await prisma.booking.findMany({
+      where: { interviewerId: interviewerId },
+      orderBy: { startTime: 'desc' },
+    });
+
+    // Fix: Properly type the categorizedMeetings object
+    const categorizedMeetings: {
+      todays: FormattedMeeting[];
+      upcoming: FormattedMeeting[];
+      past: FormattedMeeting[];
+    } = {
+      todays: [],
+      upcoming: [],
+      past: [],
+    };
+
+    for (const booking of bookings) {
+      const meetingTime = DateTime.fromJSDate(booking.startTime, { zone: TIME_ZONE });
+
+      const formattedMeeting: FormattedMeeting = {
+        student_name: booking.studentName,
+        student_email: booking.studentEmail,
+        student_phone: booking.studentPhone,
+        scheduled_date: meetingTime.toFormat('yyyy-MM-dd'),
+        scheduled_time: meetingTime.toFormat('hh:mm a'),
+        meeting_link: booking.meetingLink,
+      };
+
+      if (meetingTime >= todayStart && meetingTime < todayStart.plus({ days: 1 })) {
+        categorizedMeetings.todays.push(formattedMeeting);
+      } else if (meetingTime > todayStart) {
+        categorizedMeetings.upcoming.push(formattedMeeting);
+      } else {
+        categorizedMeetings.past.push(formattedMeeting);
+      }
+    }
+
+    res.status(200).json(categorizedMeetings);
+
+  } catch (error) {
+    console.error("Error fetching meetings:", error);
+    res.status(500).json({ message: "An internal server error occurred." });
+  }
+};

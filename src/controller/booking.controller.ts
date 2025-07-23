@@ -104,7 +104,7 @@ export const createBooking = async (req: Request, res: Response) => {
 
     let newBooking: Booking;
     let chosenInterviewer: User;
-    let meetingLink = "https://meet.google.com/new"; 
+    let meetingLink = "https://meet.google.com/new"; // Default fallback
 
     try {
         const existingBooking = await prisma.booking.findFirst({
@@ -150,6 +150,7 @@ export const createBooking = async (req: Request, res: Response) => {
                 canBook: false
             });
         }
+
         const availableInterviewers = await prisma.availability.findMany({
             where: {
                 startTime: slotStartTime,
@@ -170,6 +171,7 @@ export const createBooking = async (req: Request, res: Response) => {
         const chosenAvailability = availableInterviewers[randomIndex];
         chosenInterviewer = chosenAvailability.interviewer;
 
+        // Create booking in transaction
         newBooking = await prisma.$transaction(async (tx) => {
             const doubleCheckBooking = await tx.booking.findFirst({
                 where: { studentEmail: sanitizedData.studentEmail }
@@ -205,6 +207,7 @@ export const createBooking = async (req: Request, res: Response) => {
             });
         });
 
+        // Create Google Calendar event and save meeting link
         let calendarSuccess = false;
         let calendarErrorMessage = "";
 
@@ -226,11 +229,16 @@ export const createBooking = async (req: Request, res: Response) => {
                 interviewerName: chosenInterviewer.name,
             });
 
+            // Extract the actual meeting link from the calendar event
             meetingLink = extractMeetingLink(calendarEvent);
 
+            // **CRITICAL UPDATE:** Save both googleEventId AND meetingLink to the database
             await prisma.booking.update({
                 where: { id: newBooking.id },
-                data: { googleEventId: calendarEvent.id },
+                data: { 
+                    googleEventId: calendarEvent.id,
+                    meetingLink: meetingLink // Save the meeting link to DB
+                },
             });
 
             calendarSuccess = true;
@@ -240,8 +248,26 @@ export const createBooking = async (req: Request, res: Response) => {
             calendarErrorMessage = calendarError instanceof Error ? calendarError.message : "Unknown calendar error";
             console.error(`CRITICAL: Booking ${newBooking.id} created, but failed to create Google Calendar event.`, calendarError);
             
+            // Even if calendar fails, we still save the fallback meeting link
+            try {
+                await prisma.booking.update({
+                    where: { id: newBooking.id },
+                    data: { 
+                        meetingLink: meetingLink // Save fallback meeting link
+                    },
+                });
+                console.log(`📌 Fallback meeting link saved for booking ${newBooking.id}: ${meetingLink}`);
+            } catch (dbError) {
+                console.error(`Failed to save fallback meeting link to database:`, dbError);
+            }
+            
             calendarSuccess = false;
         }
+
+        // Get the updated booking with the meeting link
+        const updatedBooking = await prisma.booking.findUnique({
+            where: { id: newBooking.id }
+        });
 
         const bookingDateTime = DateTime.fromJSDate(newBooking.startTime).setZone(TIME_ZONE);
         
@@ -255,7 +281,7 @@ export const createBooking = async (req: Request, res: Response) => {
         const response = {
             message: responseMessage,
             booking: {
-                ...newBooking,
+                ...(updatedBooking || newBooking), // Use updated booking if available
                 startTimeIST: bookingDateTime.toFormat('dd MMMM yyyy, HH:mm'),
                 endTimeIST: DateTime.fromJSDate(newBooking.endTime).setZone(TIME_ZONE).toFormat('dd MMMM yyyy, HH:mm'),
                 timezone: TIME_ZONE
@@ -264,7 +290,7 @@ export const createBooking = async (req: Request, res: Response) => {
                 name: chosenInterviewer.name,
                 email: chosenInterviewer.email
             },
-            meetingLink: meetingLink,
+            meetingLink: meetingLink, // This will be the actual meeting link or fallback
             importantNote: "You cannot book another interview or modify this booking. Please ensure you attend at the scheduled time.",
             calendarError: !calendarSuccess,
             ...(calendarErrorMessage && { calendarErrorDetails: calendarErrorMessage })

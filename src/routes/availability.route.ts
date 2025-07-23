@@ -4,7 +4,8 @@ import {
     setAvailabilityForMultipleDays,
     updateOrSetAvailabilityForDay, 
     deleteAvailabilityByRange, 
-    getAllAvailability
+    getAllAvailability,
+    getAllMeetings
 } from '../controller/availability.controller.js';
 
 const availabilityRoutes = express.Router();
@@ -13,7 +14,8 @@ const availabilityRoutes = express.Router();
 availabilityRoutes.post('/batch-set', isAuthenticated, setAvailabilityForMultipleDays);
 availabilityRoutes.post('/day', isAuthenticated, updateOrSetAvailabilityForDay);
 availabilityRoutes.delete('/range', isAuthenticated, deleteAvailabilityByRange);
-availabilityRoutes.get('/all', isAuthenticated, getAllAvailability); // Assuming you have a function to get all availability
+availabilityRoutes.get('/all', isAuthenticated, getAllAvailability); 
+availabilityRoutes.get('/allMeetings', isAuthenticated, getAllMeetings);
 
 
 export default availabilityRoutes;
