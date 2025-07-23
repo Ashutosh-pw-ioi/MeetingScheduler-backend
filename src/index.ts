@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import availabilityRoutes from './routes/availability.route.js';
 import bookingRoutes from './routes/bookingRoutes.routes.js';
+import adminRoutes from './routes/adminRoutes.routes.js';
 
 dotenv.config();
 
@@ -35,7 +36,7 @@ app.use(passport.session());
 app.use('/auth', authRoutes);
 app.use('/api/availability', availabilityRoutes); 
 app.use('/api/booking', bookingRoutes);
-
+app.use('/api/admin', adminRoutes);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
