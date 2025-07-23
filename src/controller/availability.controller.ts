@@ -178,3 +178,86 @@ export const deleteAvailabilityByRange = async (req: Request, res: Response) => 
     res.status(500).json({ message: "An internal server error occurred." });
   }
 };
+export const getAllAvailability = async (req: Request, res: Response) => {
+  const interviewerId = (req.user as Express.User).id;
+  const now = new Date();
+
+  try {
+    // 1. Fetch all future unbooked slots, sorted by time. This is crucial.
+    const allSlots = await prisma.availability.findMany({
+      where: {
+        interviewerId,
+        isBooked: false,
+        startTime: {
+          gte: now,
+        },
+      },
+      orderBy: {
+        startTime: 'asc',
+      },
+    });
+
+    if (allSlots.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // 2. Group slots by date string (e.g., "2025-07-25")
+    const groupedByDate: Record<string, { startTime: DateTime, endTime: DateTime }[]> = {};
+
+    for (const slot of allSlots) {
+      const startTimeLuxon = DateTime.fromJSDate(slot.startTime).setZone(TIME_ZONE);
+      const dateKey = startTimeLuxon.toFormat('yyyy-MM-dd');
+
+      if (!groupedByDate[dateKey]) {
+        groupedByDate[dateKey] = [];
+      }
+      
+      groupedByDate[dateKey].push({
+        startTime: startTimeLuxon,
+        endTime: DateTime.fromJSDate(slot.endTime).setZone(TIME_ZONE),
+      });
+    }
+
+    // 3. Consolidate contiguous slots for each day
+    const finalResult = Object.entries(groupedByDate).map(([date, slots]) => {
+      const consolidatedRanges: { startTime: string, endTime: string }[] = [];
+      
+      if (slots.length > 0) {
+        let currentRange = {
+          startTime: slots[0].startTime,
+          endTime: slots[0].endTime,
+        };
+
+        for (let i = 1; i < slots.length; i++) {
+          const slot = slots[i];
+          // If the next slot starts exactly when the current range ends, extend the range
+          if (slot.startTime.equals(currentRange.endTime)) {
+            currentRange.endTime = slot.endTime;
+          } else {
+            // Otherwise, the gap means the current range is finished
+            consolidatedRanges.push({
+              startTime: currentRange.startTime.toFormat('HH:mm'),
+              endTime: currentRange.endTime.toFormat('HH:mm'),
+            });
+            currentRange = { startTime: slot.startTime, endTime: slot.endTime };
+          }
+        }
+        // Add the last processed range
+        consolidatedRanges.push({
+            startTime: currentRange.startTime.toFormat('HH:mm'),
+            endTime: currentRange.endTime.toFormat('HH:mm'),
+        });
+      }
+
+      return { date, timeRanges: consolidatedRanges };
+    });
+
+
+    res.status(200).json(finalResult);
+
+  } catch (error) {
+    console.error("Error getting all availability:", error);
+    res.status(500).json({ message: "An internal server error occurred." });
+  }
+};
+
