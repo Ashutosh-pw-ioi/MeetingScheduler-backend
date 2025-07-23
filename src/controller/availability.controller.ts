@@ -193,11 +193,10 @@ export const getAllAvailability = async (req: Request, res: Response) => {
   const now = new Date();
 
   try {
-    // 1. Fetch all future unbooked slots, sorted by time. This is crucial.
+    // Fetch ALL slots (both booked and unbooked) for future dates, sorted by time
     const allSlots = await prisma.availability.findMany({
       where: {
         interviewerId,
-        isBooked: false,
         startTime: {
           gte: now,
         },
@@ -211,7 +210,7 @@ export const getAllAvailability = async (req: Request, res: Response) => {
       return res.status(200).json([]);
     }
 
-    // 2. Group slots by date string (e.g., "2025-07-25")
+    // Group slots by date string (e.g., "2025-07-25")
     const groupedByDate: Record<string, { startTime: DateTime, endTime: DateTime }[]> = {};
 
     for (const slot of allSlots) {
@@ -228,7 +227,7 @@ export const getAllAvailability = async (req: Request, res: Response) => {
       });
     }
 
-    // 3. Consolidate contiguous slots for each day
+    // Consolidate contiguous slots for each day to reconstruct original ranges
     const finalResult = Object.entries(groupedByDate).map(([date, slots]) => {
       const consolidatedRanges: { startTime: string, endTime: string }[] = [];
       
@@ -244,7 +243,7 @@ export const getAllAvailability = async (req: Request, res: Response) => {
           if (slot.startTime.equals(currentRange.endTime)) {
             currentRange.endTime = slot.endTime;
           } else {
-            // Otherwise, the gap means the current range is finished
+            // Otherwise, there's a gap - finish current range and start a new one
             consolidatedRanges.push({
               startTime: currentRange.startTime.toFormat('HH:mm'),
               endTime: currentRange.endTime.toFormat('HH:mm'),
@@ -252,16 +251,16 @@ export const getAllAvailability = async (req: Request, res: Response) => {
             currentRange = { startTime: slot.startTime, endTime: slot.endTime };
           }
         }
-        // Add the last processed range
+        
+        // Add the final range
         consolidatedRanges.push({
-            startTime: currentRange.startTime.toFormat('HH:mm'),
-            endTime: currentRange.endTime.toFormat('HH:mm'),
+          startTime: currentRange.startTime.toFormat('HH:mm'),
+          endTime: currentRange.endTime.toFormat('HH:mm'),
         });
       }
 
       return { date, timeRanges: consolidatedRanges };
     });
-
 
     res.status(200).json(finalResult);
 
@@ -319,6 +318,55 @@ export const getAllMeetings = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error("Error fetching meetings:", error);
+    res.status(500).json({ message: "An internal server error occurred." });
+  }
+};
+
+export const getTodaySummary = async (req: Request, res: Response) => {
+  const interviewerId = (req.user as Express.User).id;
+
+  try {
+    // 1. Define the start and end of today in the correct timezone
+    const now = DateTime.now().setZone(TIME_ZONE);
+    const todayStart = now.startOf('day').toJSDate();
+    const todayEnd = now.endOf('day').toJSDate();
+
+    // 2. Use a 'groupBy' query to count booked and unbooked slots in one call
+    const slotCounts = await prisma.availability.groupBy({
+      by: ['isBooked'],
+      where: {
+        interviewerId: interviewerId,
+        startTime: {
+          gte: todayStart,
+          lt: todayEnd,
+        },
+      },
+      _count: {
+        _all: true, // Use _all for a generic count
+      },
+    });
+
+    // 3. Process the results to create a clean summary object
+    const summary = {
+      bookedSlots: 0,
+      availableSlots: 0,
+    };
+
+    for (const group of slotCounts) {
+      if (group.isBooked) {
+        summary.bookedSlots = group._count._all;
+      } else {
+        summary.availableSlots = group._count._all;
+      }
+    }
+
+    res.status(200).json({
+      date: now.toFormat('yyyy-MM-dd'),
+      ...summary
+    });
+
+  } catch (error) {
+    console.error("Error fetching today's summary:", error);
     res.status(500).json({ message: "An internal server error occurred." });
   }
 };
