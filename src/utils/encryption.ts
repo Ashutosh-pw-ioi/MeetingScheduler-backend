@@ -2,7 +2,7 @@ import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
-const KEY = Buffer.from(process.env.TOKEN_ENCRYPTION_KEY!, 'hex');
+const KEY = Buffer.from(process.env.GOOGLE_TOKEN_ENCRYPTION_KEY!, 'hex');
 
 export const encrypt = (text: string) => {
   const iv = crypto.randomBytes(IV_LENGTH);

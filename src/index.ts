@@ -8,6 +8,7 @@ import cors from 'cors';
 import availabilityRoutes from './routes/availability.route.js';
 import bookingRoutes from './routes/bookingRoutes.routes.js';
 import adminRoutes from './routes/adminRoutes.routes.js';
+import studentRoutes from './routes/studentRoutes.routes.js';
 
 dotenv.config();
 
@@ -20,7 +21,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
-    secret: process.env.SESSION_SECRET || "your_session_secret",
+    secret: process.env.GOOGLE_SESSION_SECRET || "your_session_secret",
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -37,6 +38,7 @@ app.use('/auth', authRoutes);
 app.use('/api/availability', availabilityRoutes); 
 app.use('/api/booking', bookingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/student',studentRoutes)
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
