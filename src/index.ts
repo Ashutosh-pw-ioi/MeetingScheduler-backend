@@ -38,5 +38,9 @@ app.use('/api/availability', availabilityRoutes);
 app.use('/api/booking', bookingRoutes);
 app.use('/api/admin', adminRoutes);
 
+app.get("/", (req, res) => {
+  res.status(200).json({ message: "Server running" });
+});
+
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
