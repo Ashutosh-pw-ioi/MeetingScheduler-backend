@@ -1,0 +1,68 @@
+// This is your Prisma schema file.
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id                String    @id @default(uuid())
+  googleId          String    @unique
+  email             String    @unique
+  name              String
+  avatarUrl         String?
+  accessToken       String?
+  refreshToken      String?
+  calendarConnected Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  lastLogin         DateTime  @updatedAt
+  
+  availabilities    Availability[]
+
+  interviewerBookings Booking[] @relation("InterviewerBookings")
+
+}
+
+// Model for Interviewer's availability
+model Availability {
+  id            String   @id @default(uuid())
+  interviewerId String
+  startTime     DateTime
+  endTime       DateTime
+  isBooked      Boolean  @default(false)
+  
+  interviewer   User     @relation(fields: [interviewerId], references: [id])
+  booking       Booking?
+
+  createdAt     DateTime @default(now())
+
+  @@unique([interviewerId, startTime])
+}
+
+
+model Booking {
+  id              String    @id @default(uuid())
+  
+  studentName     String
+  studentEmail    String    @unique
+  studentPhone    String?
+
+  interviewerId   String
+  availabilityId  String    @unique 
+  
+  startTime       DateTime
+  endTime         DateTime
+  googleEventId   String?
+  meetingLink     String?  
+
+  interviewer     User      @relation("InterviewerBookings", fields: [interviewerId], references: [id])
+  availability    Availability @relation(fields: [availabilityId], references: [id])
+
+  createdAt       DateTime  @default(now())
+}
