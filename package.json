@@ -2,7 +2,7 @@
   "name": "meetingscheduler-backend",
   "version": "1.0.0",
   "description": "This is the Backend of MeetingSchedular ",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc -b",
     "start": "node dist/index.js",
