@@ -1,5 +1,4 @@
-// utils/dashboard.utils.ts
-import { BarChartDataPoint, DashboardBooking } from '../types/dashboard.types.js';
+import { BarChartDataPoint, WeeklyBookingData } from '../types/dashboard.types.js';
 
 export const getTodayDateRange = (): { startOfDay: Date; endOfDay: Date } => {
   const today = new Date();
@@ -35,7 +34,8 @@ export const getDayName = (date: Date): string => {
   return days[date.getDay()];
 };
 
-export const generateWeeklyBarChartData = (bookings: DashboardBooking[]): BarChartDataPoint[] => {
+// Updated function signature to accept WeeklyBookingData
+export const generateWeeklyBarChartData = (bookings: WeeklyBookingData[]): BarChartDataPoint[] => {
   const { startOfWeek } = getWeekDateRange();
   
   // Initialize data for each day of the week

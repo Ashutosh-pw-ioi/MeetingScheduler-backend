@@ -1,4 +1,3 @@
-// types/dashboard.types.ts
 export interface MetricData {
   title: string;
   value: number | string;
@@ -26,21 +25,21 @@ export interface DashboardResponse {
   barChartData: BarChartDataPoint[];
 }
 
-
-// Extended Prisma types
-export type DashboardBooking = {
+// Keep the original DashboardBooking for other uses if needed
+export interface DashboardBooking {
   id: string;
   studentEmail: string;
   startTime: Date;
-  interviewer: {
-    id: string;
-  };
-};
+  interviewer: DashboardUser;
+}
 
-export type DashboardUser = {
+export interface DashboardUser {
   id: string;
-  availabilities: {
-    id: string;
-    isBooked: boolean;
-  }[];
-};
+  name: string;
+  email: string;
+}
+
+// New interface specifically for weekly chart data
+export interface WeeklyBookingData {
+  startTime: Date;
+}

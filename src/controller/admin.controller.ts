@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { StudentService } from '../services/studentService.js';
 import { 
   InterviewerResponse, 
   ApiResponse, 
@@ -15,8 +16,6 @@ import {
   DashboardResponse,
   MetricData,
   PieChartData,
-  DashboardBooking,
-  DashboardUser
 } from '../types/dashboard.types.js';
 import { 
   getTodayDateRange, 
@@ -164,10 +163,10 @@ export const getTodaysDashboard = async (
   try {
     const { startOfWeek, endOfWeek } = getWeekDateRange();
 
-    // Get all required data
+    // Get all required data in parallel
     const [
       interviewers,
-      uniqueInterviewees,
+      bookingStatusCount,
       totalSlots,
       bookedSlots,
       weeklyBookings
@@ -181,11 +180,8 @@ export const getTodaysDashboard = async (
         }
       }),
 
-      // Count unique interviewees (students with bookings)
-      prisma.booking.findMany({
-        select: { studentEmail: true },
-        distinct: ['studentEmail']
-      }),
+      // Get booking status count using our service
+      StudentService.getBookingStatusCount(),
 
       // Total availability slots
       prisma.availability.count(),
@@ -210,7 +206,6 @@ export const getTodaysDashboard = async (
     ]);
 
     // Calculate metrics
-    const totalIntervieweesCount = uniqueInterviewees.length;
     const availableSlots = totalSlots - bookedSlots;
     const bookingRate = formatBookingRate(bookedSlots, totalSlots);
 
@@ -222,9 +217,9 @@ export const getTodaysDashboard = async (
         subtitle: "Active interviewers"
       },
       {
-        title: "Total Interviewees",
-        value: totalIntervieweesCount,
-        subtitle: "Registered candidates"
+        title: "Total Students",
+        value: bookingStatusCount.totalStudents,
+        subtitle: "Registered students"
       },
       {
         title: "Total Slots",
@@ -247,15 +242,15 @@ export const getTodaysDashboard = async (
         ]
       },
       {
-        title: "Interviewee Booking Status",
+        title: "Student Booking Status",
         data: [
-          { name: "Booked", value: totalIntervieweesCount },
-          { name: "Not Booked", value: 0 } // Based on current schema, all interviewees have bookings
+          { name: "Booked", value: bookingStatusCount.bookedCount },
+          { name: "Not Booked", value: bookingStatusCount.notBookedCount }
         ]
       }
     ];
 
-    const barChartData = generateWeeklyBarChartData(weeklyBookings as DashboardBooking[]);
+    const barChartData = generateWeeklyBarChartData(weeklyBookings);
 
     const dashboardData: DashboardResponse = {
       metrics,
