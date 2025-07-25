@@ -8,6 +8,7 @@ import cors from 'cors';
 import availabilityRoutes from './routes/availability.route.js';
 import bookingRoutes from './routes/bookingRoutes.routes.js';
 import adminRoutes from './routes/adminRoutes.routes.js';
+import studentRoutes from './routes/studentRoutes.routes.js';
 
 dotenv.config();
 
@@ -37,6 +38,7 @@ app.use('/auth', authRoutes);
 app.use('/api/availability', availabilityRoutes); 
 app.use('/api/booking', bookingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/student',studentRoutes)
 
 app.get("/", (req, res) => {
   res.status(200).json({ message: "Server running" });

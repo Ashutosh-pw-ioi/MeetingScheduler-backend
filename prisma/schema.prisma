@@ -66,3 +66,12 @@ model Booking {
 
   createdAt       DateTime  @default(now())
 }
+model Student {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  phone         String    @unique
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
