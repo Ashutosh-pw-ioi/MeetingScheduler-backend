@@ -22,7 +22,7 @@ model User {
   calendarConnected Boolean   @default(false)
   createdAt         DateTime  @default(now())
   lastLogin         DateTime  @updatedAt
-  
+
   availabilities    Availability[]
 
   interviewerBookings Booking[] @relation("InterviewerBookings")
@@ -36,7 +36,7 @@ model Availability {
   startTime     DateTime
   endTime       DateTime
   isBooked      Boolean  @default(false)
-  
+
   interviewer   User     @relation(fields: [interviewerId], references: [id])
   booking       Booking?
 
@@ -48,18 +48,18 @@ model Availability {
 
 model Booking {
   id              String    @id @default(uuid())
-  
+
   studentName     String
   studentEmail    String    @unique
   studentPhone    String?
 
   interviewerId   String
-  availabilityId  String    @unique 
-  
+  availabilityId  String    @unique
+
   startTime       DateTime
   endTime         DateTime
   googleEventId   String?
-  meetingLink     String?  
+  meetingLink     String?
 
   interviewer     User      @relation("InterviewerBookings", fields: [interviewerId], references: [id])
   availability    Availability @relation(fields: [availabilityId], references: [id])
@@ -71,7 +71,7 @@ model Student {
   name          String
   email         String    @unique
   phone         String    @unique
-  
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
