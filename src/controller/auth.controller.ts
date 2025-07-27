@@ -77,10 +77,10 @@ const redirectUser = (req: Request, res: Response) => {
   
   if (hasCalendarAccess) {
     // Redirect to interviewer overview page instead of dashboard
-    res.redirect(`${process.env.ORIGIN}/interviewer?setup=complete`);
+    res.redirect(`${process.env.ORIGIN}/interviewer-D9C75C81F03C9AA4?setup=complete`);
   } else {
     // Redirect to interviewer overview page - calendar prompt will show there
-    res.redirect(`${process.env.ORIGIN}/interviewer?calendar=setup`);
+    res.redirect(`${process.env.ORIGIN}/interviewer-D9C75C81F03C9AA4?calendar=setup`);
   }
 };
 
