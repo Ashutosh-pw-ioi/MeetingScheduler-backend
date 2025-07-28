@@ -279,6 +279,7 @@ export const getBookedInterviews = async (req: Request, res: Response) => {
     const students = await prisma.student.findMany();
     const result: {
       applicationId: string;
+      phone:string;
       interviewer: string;
       interviewDate: Date;
     }[] = [];
@@ -310,6 +311,7 @@ export const getBookedInterviews = async (req: Request, res: Response) => {
       for (const booking of bookings) {
         result.push({
           applicationId: student.applicationId,
+          phone:student.phone,
           interviewer: booking.interviewer.name,
           interviewDate: booking.startTime
         });
