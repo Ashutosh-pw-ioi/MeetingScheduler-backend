@@ -7,6 +7,7 @@ const prisma = new PrismaClient();
 
 
 interface StudentInput {
+  applicationId: string;
   name: string;
   email: string;
   phone: string;
@@ -44,16 +45,18 @@ export const createManyStudents = async (
 
     for (let i = 0; i < students.length; i++) {
       const student = students[i];
-      if (!student.name || !student.email || !student.phone) {
+      if (!student.applicationId || !student.name || !student.email || !student.phone) {
         return res.status(400).json({
           success: false,
-          message: `Student at index ${i} is missing required fields (name, email, phone)`
+          message: `Student at index ${i} is missing required fields (applicationId, name, email, phone)`
         });
       }
 
-      if (typeof student.name !== 'string' || 
-          typeof student.email !== 'string' || 
-          typeof student.phone !== 'string') {
+      if (
+        typeof student.applicationId!=='string'||
+        typeof student.name !== 'string' ||
+        typeof student.email !== 'string' ||
+        typeof student.phone !== 'string') {
         return res.status(400).json({
           success: false,
           message: `Student at index ${i} has invalid field types. All fields must be strings`
@@ -63,7 +66,7 @@ export const createManyStudents = async (
 
     const result = await prisma.student.createMany({
       data: students,
-      skipDuplicates: true  
+      skipDuplicates: true
     });
 
     return res.status(201).json({
@@ -76,7 +79,7 @@ export const createManyStudents = async (
 
   } catch (error: any) {
     console.error('Error creating students:', error);
-    
+
     if (error.code === 'P2002') {
       return res.status(409).json({
         success: false,
@@ -94,7 +97,7 @@ export const createManyStudents = async (
 };
 export const checkStudents = async (
   req: Request,
-  res:Response
+  res: Response
 ): Promise<void> => {
   try {
     const { phone } = req.body;
@@ -113,8 +116,8 @@ export const checkStudents = async (
       success: true,
       data: {
         authorized: isAuthorized,
-        message: isAuthorized 
-          ? 'Student is authorized to book' 
+        message: isAuthorized
+          ? 'Student is authorized to book'
           : 'Student not found in database'
       },
       message: 'Authorization check completed'
@@ -122,7 +125,7 @@ export const checkStudents = async (
 
   } catch (error: unknown) {
     console.error('Error checking student authorization:', error);
-    
+
     res.status(500).json({
       success: false,
       message: 'Failed to check authorization',

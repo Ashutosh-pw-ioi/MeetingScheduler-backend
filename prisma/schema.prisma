@@ -68,6 +68,7 @@ model Booking {
 }
 model Student {
   id            String    @id @default(uuid())
+  applicationId String
   name          String
   email         String    @unique
   phone         String    @unique

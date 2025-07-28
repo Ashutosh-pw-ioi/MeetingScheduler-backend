@@ -37,9 +37,23 @@ CREATE TABLE "Booking" (
     "startTime" TIMESTAMP(3) NOT NULL,
     "endTime" TIMESTAMP(3) NOT NULL,
     "googleEventId" TEXT,
+    "meetingLink" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Booking_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Student" (
+    "id" TEXT NOT NULL,
+    "applicationId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "phone" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Student_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -56,6 +70,12 @@ CREATE UNIQUE INDEX "Booking_studentEmail_key" ON "Booking"("studentEmail");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Booking_availabilityId_key" ON "Booking"("availabilityId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Student_email_key" ON "Student"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Student_phone_key" ON "Student"("phone");
 
 -- AddForeignKey
 ALTER TABLE "Availability" ADD CONSTRAINT "Availability_interviewerId_fkey" FOREIGN KEY ("interviewerId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
