@@ -274,3 +274,51 @@ export const getTodaysDashboard = async (
     });
   }
 };
+export const getBookedInterviews = async (req: Request, res: Response) => {
+  try {
+    const students = await prisma.student.findMany();
+    const result: {
+      applicationId: string;
+      interviewer: string;
+      interviewDate: Date;
+    }[] = [];
+
+    for (const student of students) {
+      const bookings = await prisma.booking.findMany({
+        where: {
+          AND: [
+            {
+              OR: [
+                { studentEmail: student.email },
+                { studentPhone: student.phone }
+              ]
+            },
+            {
+              availability: {
+                isBooked: true
+              }
+            }
+          ]
+        },
+        include: {
+          interviewer: {
+            select: { name: true }
+          }
+        }
+      });
+
+      for (const booking of bookings) {
+        result.push({
+          applicationId: student.applicationId,
+          interviewer: booking.interviewer.name,
+          interviewDate: booking.startTime
+        });
+      }
+    }
+
+    return res.status(200).json({ data: result });
+  } catch (error) {
+    console.error('Error fetching interview bookings:', error);
+    return res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
