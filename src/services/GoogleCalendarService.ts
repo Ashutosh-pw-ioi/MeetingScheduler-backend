@@ -71,11 +71,11 @@ Interviewer: ${eventDetails.interviewerName} (${eventDetails.interviewerEmail})
 Student: ${eventDetails.studentName} (${eventDetails.studentEmail})
 Student Phone: ${eventDetails.studentPhone || 'Not provided'}
 
-This is an automated booking. Please contact support if you need to reschedule.
+Join five minutes before the scheduled time and wait for 10 minutes, otherwise, absence will be marked.
             `.trim();
 
             const event = {
-                summary: `Interview: ${eventDetails.interviewerName} and ${eventDetails.studentName}`,
+                summary: `CEE_Interview_${eventDetails.studentName}_${eventDetails.studentPhone}`,
                 description: eventDescription,
                 start: {
                     dateTime: eventDetails.startTime.toISOString(),
