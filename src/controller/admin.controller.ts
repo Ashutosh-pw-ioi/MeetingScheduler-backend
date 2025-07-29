@@ -279,9 +279,10 @@ export const getBookedInterviews = async (req: Request, res: Response) => {
     const students = await prisma.student.findMany();
     const result: {
       applicationId: string;
-      phone:string;
+      phone: string;
       interviewer: string;
       interviewDate: Date;
+      meetingLink: string | null;
     }[] = [];
 
     for (const student of students) {
@@ -291,7 +292,7 @@ export const getBookedInterviews = async (req: Request, res: Response) => {
             {
               OR: [
                 { studentEmail: student.email },
-                { studentPhone: student.phone }
+                { studentPhone: student.phone },
               ]
             },
             {
@@ -301,9 +302,13 @@ export const getBookedInterviews = async (req: Request, res: Response) => {
             }
           ]
         },
-        include: {
+        select: {
+          startTime: true,
+          meetingLink: true,
           interviewer: {
-            select: { name: true }
+            select: {
+              name: true
+            }
           }
         }
       });
@@ -311,9 +316,10 @@ export const getBookedInterviews = async (req: Request, res: Response) => {
       for (const booking of bookings) {
         result.push({
           applicationId: student.applicationId,
-          phone:student.phone,
+          phone: student.phone,
           interviewer: booking.interviewer.name,
-          interviewDate: booking.startTime
+          interviewDate: booking.startTime,
+          meetingLink: booking.meetingLink ?? null
         });
       }
     }
