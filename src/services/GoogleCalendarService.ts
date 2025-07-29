@@ -39,7 +39,6 @@ export class GoogleCalendarService {
             access_token: accessToken
         });
 
-        // Handle token refresh
         this.oauth2Client.on('tokens', async (tokens) => {
             if (tokens.access_token) {
                 const encryptedAccessToken = encrypt(tokens.access_token);
@@ -74,6 +73,21 @@ Student Phone: ${eventDetails.studentPhone || 'Not provided'}
 Join five minutes before the scheduled time and wait for 10 minutes, otherwise, absence will be marked.
             `.trim();
 
+            const attendees = [
+                { 
+                    email: eventDetails.interviewerEmail,
+                    responseStatus: 'accepted'
+                },
+                { 
+                    email: eventDetails.studentEmail,
+                    responseStatus: 'needsAction'
+                },
+                {
+                    email: 'admissions@pwioi.com',
+                    responseStatus: 'accepted'
+                }
+            ];
+
             const event = {
                 summary: `CEE_Interview_${eventDetails.studentName}_${eventDetails.studentPhone}`,
                 description: eventDescription,
@@ -85,16 +99,7 @@ Join five minutes before the scheduled time and wait for 10 minutes, otherwise, 
                     dateTime: eventDetails.endTime.toISOString(),
                     timeZone: 'Asia/Kolkata',
                 },
-                attendees: [
-                    { 
-                        email: eventDetails.interviewerEmail,
-                        responseStatus: 'accepted'
-                    },
-                    { 
-                        email: eventDetails.studentEmail,
-                        responseStatus: 'needsAction'
-                    }
-                ],
+                attendees: attendees,
                 reminders: {
                     useDefault: false,
                     overrides: [
@@ -128,7 +133,6 @@ Join five minutes before the scheduled time and wait for 10 minutes, otherwise, 
         } catch (error: any) {
             console.error('Calendar Service Error:', error);
             
-            // Handle specific OAuth errors
             if (error.code === 401 || error.message.includes('invalid_grant')) {
                 throw new Error(`Calendar authorization expired. Interviewer ${this.interviewerId} needs to reconnect their calendar.`);
             }
@@ -141,13 +145,11 @@ Join five minutes before the scheduled time and wait for 10 minutes, otherwise, 
         }
     }
 
-    // Method to test calendar connection
     async testConnection() {
         try {
             await this.authorize();
             const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
             
-            // Try to list calendars to test connection
             await calendar.calendarList.list({
                 maxResults: 1
             });
