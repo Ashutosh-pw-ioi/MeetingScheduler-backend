@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient,Department } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { Request, Response } from 'express';
 import { generateAvailabilitySlots } from '../utils/slotGenerator.js';
@@ -14,7 +14,56 @@ interface FormattedMeeting {
 const prisma = new PrismaClient();
 const TIME_ZONE = 'Asia/Kolkata';
 
+export const setDepartment = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req.user as { id: string }).id;
+    let { department } = req.body;
 
+    if (typeof department !== 'string') {
+      res.status(400).json({ message: 'Department must be a string.' });
+      return;
+    }
+
+    department = department.toUpperCase();
+
+    const validDepartments: Department[] = [Department.SOT, Department.SOM];
+
+    if (!validDepartments.includes(department as Department)) {
+      res.status(400).json({
+        message: 'Invalid department selected. Choose from: SOT, SOM.'
+      });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { department: true }
+    });
+
+    if (!user) {
+      res.status(404).json({ message: 'User not found.' });
+      return;
+    }
+
+    if (user.department) {
+      res.status(403).json({
+        message: 'Department already set and cannot be changed.'
+      });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { department: department as Department }
+    });
+
+    res.status(200).json({ message: 'Department set successfully.' });
+
+  } catch (error) {
+    console.error('Error in setDepartment:', error);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+};
 
 export const setAvailabilityForMultipleDays = async (req: Request, res: Response) => {
   const interviewerId = (req.user as Express.User).id;

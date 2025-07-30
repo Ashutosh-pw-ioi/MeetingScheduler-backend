@@ -10,23 +10,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Enum for departments
+enum Department {
+  SOT  // School of Technology
+  SOM  // School of Management
+}
 
 model User {
-  id                String    @id @default(uuid())
-  googleId          String    @unique
-  email             String    @unique
+  id                String     @id @default(uuid())
+  googleId          String     @unique
+  email             String     @unique
   name              String
   avatarUrl         String?
   accessToken       String?
   refreshToken      String?
-  calendarConnected Boolean   @default(false)
-  createdAt         DateTime  @default(now())
-  lastLogin         DateTime  @updatedAt
+  calendarConnected Boolean    @default(false)
+  department        Department // Added department field
+  createdAt         DateTime   @default(now())
+  lastLogin         DateTime   @updatedAt
 
-  availabilities    Availability[]
-
-  interviewerBookings Booking[] @relation("InterviewerBookings")
-
+  availabilities      Availability[]
+  interviewerBookings Booking[]      @relation("InterviewerBookings")
 }
 
 // Model for Interviewer's availability
@@ -45,34 +49,35 @@ model Availability {
   @@unique([interviewerId, startTime])
 }
 
-
 model Booking {
-  id              String    @id @default(uuid())
+  id             String @id @default(uuid())
 
-  studentName     String
-  studentEmail    String    @unique
-  studentPhone    String?
+  studentName    String
+  studentEmail   String @unique
+  studentPhone   String?
 
-  interviewerId   String
-  availabilityId  String    @unique
+  interviewerId  String
+  availabilityId String @unique
 
-  startTime       DateTime
-  endTime         DateTime
-  googleEventId   String?
-  meetingLink     String?
+  startTime      DateTime
+  endTime        DateTime
+  googleEventId  String?
+  meetingLink    String?
 
-  interviewer     User      @relation("InterviewerBookings", fields: [interviewerId], references: [id])
-  availability    Availability @relation(fields: [availabilityId], references: [id])
+  interviewer  User         @relation("InterviewerBookings", fields: [interviewerId], references: [id])
+  availability Availability @relation(fields: [availabilityId], references: [id])
 
-  createdAt       DateTime  @default(now())
+  createdAt    DateTime @default(now())
 }
+
 model Student {
-  id            String    @id @default(uuid())
+  id            String     @id @default(uuid())
   applicationId String
   name          String
-  email         String    @unique
-  phone         String    @unique
+  email         String     @unique
+  phone         String     @unique
+  department    Department // Added department field
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 }
