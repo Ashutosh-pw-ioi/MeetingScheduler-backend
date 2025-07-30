@@ -9,6 +9,7 @@ declare namespace Express {
     refreshToken?: string | null;    
     googleId?: string;
     lastLogin?: Date;
+    department: string;
   }
 
   

@@ -7,7 +7,8 @@ const checkUser = (req: Request, res: Response) => {
       email: req.user.email,
       name: req.user.name,
       avatarUrl: req.user.avatarUrl,
-      calendarConnected: req.user.calendarConnected || false
+      calendarConnected: req.user.calendarConnected || false,
+      department: req.user.department, 
     };
     res.status(200).json(user);
   } else {
