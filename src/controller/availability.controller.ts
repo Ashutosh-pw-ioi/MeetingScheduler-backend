@@ -45,19 +45,23 @@ export const setDepartment = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    if (user.department) {
+    // Check if user's current department is GENERAL
+    if (user.department !== Department.GENERAL) {
       res.status(403).json({
-        message: 'Department already set and cannot be changed.'
+        message: 'Department can only be changed from GENERAL to SOT or SOM, and only once.'
       });
       return;
     }
 
+    // Update department from GENERAL to the selected department
     await prisma.user.update({
       where: { id: userId },
       data: { department: department as Department }
     });
 
-    res.status(200).json({ message: 'Department set successfully.' });
+    res.status(200).json({ 
+      message: `Department successfully updated from GENERAL to ${department}.` 
+    });
 
   } catch (error) {
     console.error('Error in setDepartment:', error);

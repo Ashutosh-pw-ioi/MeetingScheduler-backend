@@ -12,8 +12,9 @@ datasource db {
 
 // Enum for departments
 enum Department {
-  SOT  // School of Technology
-  SOM  // School of Management
+  SOT     // School of Technology
+  SOM     // School of Management
+  GENERAL // General/Default department
 }
 
 model User {
@@ -25,7 +26,7 @@ model User {
   accessToken       String?
   refreshToken      String?
   calendarConnected Boolean    @default(false)
-  department        Department // Added department field
+  department        Department @default(GENERAL) // Added department field with default
   createdAt         DateTime   @default(now())
   lastLogin         DateTime   @updatedAt
 
@@ -76,7 +77,7 @@ model Student {
   name          String
   email         String     @unique
   phone         String     @unique
-  department    Department // Added department field
+  department    Department @default(GENERAL) // Added department field with default
 
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt

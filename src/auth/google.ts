@@ -1,7 +1,7 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy, Profile as GoogleProfile, VerifyCallback } from 'passport-google-oauth20';
 import dotenv from 'dotenv';
-import { PrismaClient, User } from '@prisma/client';
+import { PrismaClient, User, Department } from '@prisma/client';
 import { encrypt } from '../utils/encryption.js';
 
 dotenv.config();
@@ -12,7 +12,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      callbackURL:process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8000/auth/google/callback',
+      callbackURL: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:8000/auth/google/callback',
     },
     async (
       accessToken: string,
@@ -39,6 +39,7 @@ passport.use(
           accessToken: encryptedAccess,
           refreshToken: encryptedRefresh,
           calendarConnected: hasCalendarAccess,
+          department: Department.GENERAL, // Add default department
           lastLogin: new Date(),
         };
 
