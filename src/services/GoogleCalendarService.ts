@@ -84,7 +84,7 @@ Join five minutes before the scheduled time and wait for 10 minutes, otherwise, 
                     responseStatus: 'needsAction'
                 },
                 {
-                    email: 'satyam.sot010110@pwioi.com', // Presumably your internal support account
+                    email: 'admissions@pwioi.com', // Presumably your internal support account
                     responseStatus: 'accepted'
                 }
             ];
