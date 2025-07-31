@@ -20,10 +20,10 @@ export class GoogleCalendarService {
     private async authorize() {
         const interviewer = await prisma.user.findUnique({
             where: { id: this.interviewerId },
-            select: { 
-                refreshToken: true, 
+            select: {
+                refreshToken: true,
                 accessToken: true,
-                calendarConnected: true 
+                calendarConnected: true
             }
         });
 
@@ -34,7 +34,7 @@ export class GoogleCalendarService {
         const refreshToken = decrypt(interviewer.refreshToken);
         const accessToken = interviewer.accessToken ? decrypt(interviewer.accessToken) : null;
 
-        this.oauth2Client.setCredentials({ 
+        this.oauth2Client.setCredentials({
             refresh_token: refreshToken,
             access_token: accessToken
         });
@@ -55,6 +55,7 @@ export class GoogleCalendarService {
         endTime: Date;
         studentName: string;
         studentEmail: string;
+        department: string;         // <-- department included here
         studentPhone?: string;
         interviewerEmail: string;
         interviewerName: string;
@@ -74,22 +75,23 @@ Join five minutes before the scheduled time and wait for 10 minutes, otherwise, 
             `.trim();
 
             const attendees = [
-                { 
+                {
                     email: eventDetails.interviewerEmail,
                     responseStatus: 'accepted'
                 },
-                { 
+                {
                     email: eventDetails.studentEmail,
                     responseStatus: 'needsAction'
                 },
                 {
-                    email: 'admissions@pwioi.com',
+                    email: 'admissions@pwioi.com', // Presumably your internal support account
                     responseStatus: 'accepted'
                 }
             ];
 
+            // Use department in the summary to clearly identify interview type
             const event = {
-                summary: `CEE_Interview_${eventDetails.studentName}_${eventDetails.studentPhone}`,
+                summary: `CEE_Interview_${eventDetails.studentName}_${eventDetails.studentPhone || 'NoPhone'}_${eventDetails.department}`,
                 description: eventDescription,
                 start: {
                     dateTime: eventDetails.startTime.toISOString(),
@@ -132,11 +134,11 @@ Join five minutes before the scheduled time and wait for 10 minutes, otherwise, 
 
         } catch (error: any) {
             console.error('Calendar Service Error:', error);
-            
-            if (error.code === 401 || error.message.includes('invalid_grant')) {
+
+            if (error.code === 401 || (error.message && error.message.includes('invalid_grant'))) {
                 throw new Error(`Calendar authorization expired. Interviewer ${this.interviewerId} needs to reconnect their calendar.`);
             }
-            
+
             if (error.code === 403) {
                 throw new Error(`Calendar access denied. Interviewer ${this.interviewerId} has not granted sufficient calendar permissions.`);
             }
@@ -149,11 +151,11 @@ Join five minutes before the scheduled time and wait for 10 minutes, otherwise, 
         try {
             await this.authorize();
             const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
-            
+
             await calendar.calendarList.list({
                 maxResults: 1
             });
-            
+
             return true;
         } catch (error) {
             return false;
