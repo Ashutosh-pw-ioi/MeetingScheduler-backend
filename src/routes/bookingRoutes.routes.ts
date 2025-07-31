@@ -3,7 +3,7 @@ import { getPublicAvailability, createBooking } from '../controller/booking.cont
 
 const bookingRoutes = express.Router();
 
-bookingRoutes.get('/availability', getPublicAvailability);
+bookingRoutes.get('/availability/:phone', getPublicAvailability);
 bookingRoutes.post('/book', createBooking);
 
 export default bookingRoutes;

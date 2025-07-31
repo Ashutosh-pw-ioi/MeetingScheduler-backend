@@ -7,12 +7,13 @@ import {
     getAllAvailability,
     getAllMeetings,
     getTodaySummary,
-    getAllBookedCountsWeekly
+    getAllBookedCountsWeekly,
+    setDepartment
 } from '../controller/availability.controller.js';
 
 const availabilityRoutes = express.Router();
 
-
+availabilityRoutes.post('/set-department',isAuthenticated,setDepartment)
 availabilityRoutes.post('/batch-set', isAuthenticated, setAvailabilityForMultipleDays);
 availabilityRoutes.post('/day', isAuthenticated, updateOrSetAvailabilityForDay);
 availabilityRoutes.delete('/range', isAuthenticated, deleteAvailabilityByRange);
