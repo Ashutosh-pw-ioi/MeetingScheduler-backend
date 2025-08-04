@@ -16,6 +16,7 @@ import {
   DashboardResponse,
   MetricData,
   PieChartData,
+  BarChartDataPoint
 } from '../types/dashboard.types.js';
 import { 
   getTodayDateRange, 
@@ -156,20 +157,50 @@ export const getAllInterviewees = async (
     res.status(500).json(errorResponse);
   }
 };
-export const getTodaysDashboard = async (
+export const getThreeDaysDashboard = async (
   req: Request,
   res: Response<ApiResponse<DashboardResponse> | ErrorResponse>
 ): Promise<void> => {
   try {
-    const { startOfWeek, endOfWeek } = getWeekDateRange();
+    // Get date ranges for today, tomorrow, and day after tomorrow
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const dayAfterTomorrow = new Date(today);
+    dayAfterTomorrow.setDate(today.getDate() + 2);
+
+    // Set time boundaries (start and end of each day)
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayEnd = new Date(todayStart);
+    todayEnd.setDate(todayStart.getDate() + 1);
+
+    const tomorrowStart = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate());
+    const tomorrowEnd = new Date(tomorrowStart);
+    tomorrowEnd.setDate(tomorrowStart.getDate() + 1);
+
+    const dayAfterTomorrowStart = new Date(dayAfterTomorrow.getFullYear(), dayAfterTomorrow.getMonth(), dayAfterTomorrow.getDate());
+    const dayAfterTomorrowEnd = new Date(dayAfterTomorrowStart);
+    dayAfterTomorrowEnd.setDate(dayAfterTomorrowStart.getDate() + 1);
 
     // Get all required data in parallel
     const [
       interviewers,
       bookingStatusCount,
-      totalSlots,
-      bookedSlots,
-      weeklyBookings
+      
+      // Today's data
+      todayTotalSlots,
+      todayBookedSlots,
+      todayBookings,
+
+      // Tomorrow's data
+      tomorrowTotalSlots,
+      tomorrowBookedSlots,
+      tomorrowBookings,
+
+      // Day after tomorrow's data
+      dayAfterTomorrowTotalSlots,
+      dayAfterTomorrowBookedSlots,
+      dayAfterTomorrowBookings
     ] = await Promise.all([
       // Count users with availability slots
       prisma.user.count({
@@ -179,24 +210,101 @@ export const getTodaysDashboard = async (
           }
         }
       }),
-
       // Get booking status count using our service
       StudentService.getBookingStatusCount(),
 
-      // Total availability slots
-      prisma.availability.count(),
-
-      // Booked slots
+      // TODAY'S DATA
+      // Today's total availability slots
       prisma.availability.count({
-        where: { isBooked: true }
+        where: {
+          startTime: {
+            gte: todayStart,
+            lt: todayEnd
+          }
+        }
       }),
-
-      // This week's bookings for bar chart
+      // Today's booked slots
+      prisma.availability.count({
+        where: {
+          startTime: {
+            gte: todayStart,
+            lt: todayEnd
+          },
+          isBooked: true
+        }
+      }),
+      // Today's bookings
       prisma.booking.findMany({
         where: {
           startTime: {
-            gte: startOfWeek,
-            lt: endOfWeek
+            gte: todayStart,
+            lt: todayEnd
+          }
+        },
+        select: {
+          startTime: true
+        }
+      }),
+
+      // TOMORROW'S DATA
+      // Tomorrow's total availability slots
+      prisma.availability.count({
+        where: {
+          startTime: {
+            gte: tomorrowStart,
+            lt: tomorrowEnd
+          }
+        }
+      }),
+      // Tomorrow's booked slots
+      prisma.availability.count({
+        where: {
+          startTime: {
+            gte: tomorrowStart,
+            lt: tomorrowEnd
+          },
+          isBooked: true
+        }
+      }),
+      // Tomorrow's bookings
+      prisma.booking.findMany({
+        where: {
+          startTime: {
+            gte: tomorrowStart,
+            lt: tomorrowEnd
+          }
+        },
+        select: {
+          startTime: true
+        }
+      }),
+
+      // DAY AFTER TOMORROW'S DATA
+      // Day after tomorrow's total availability slots
+      prisma.availability.count({
+        where: {
+          startTime: {
+            gte: dayAfterTomorrowStart,
+            lt: dayAfterTomorrowEnd
+          }
+        }
+      }),
+      // Day after tomorrow's booked slots
+      prisma.availability.count({
+        where: {
+          startTime: {
+        gte: dayAfterTomorrowStart,
+        lt: dayAfterTomorrowEnd
+          },
+          isBooked: true
+        }
+      }),
+      // Day after tomorrow's bookings
+      prisma.booking.findMany({
+        where: {
+          startTime: {
+            gte: dayAfterTomorrowStart,
+            lt: dayAfterTomorrowEnd
           }
         },
         select: {
@@ -205,9 +313,20 @@ export const getTodaysDashboard = async (
       })
     ]);
 
-    // Calculate metrics
-    const availableSlots = totalSlots - bookedSlots;
-    const bookingRate = formatBookingRate(bookedSlots, totalSlots);
+    // Calculate metrics for each day
+    const todayAvailableSlots = todayTotalSlots - todayBookedSlots;
+    const todayBookingRate = formatBookingRate(todayBookedSlots, todayTotalSlots);
+
+    const tomorrowAvailableSlots = tomorrowTotalSlots - tomorrowBookedSlots;
+    const tomorrowBookingRate = formatBookingRate(tomorrowBookedSlots, tomorrowTotalSlots);
+
+    const dayAfterTomorrowAvailableSlots = dayAfterTomorrowTotalSlots - dayAfterTomorrowBookedSlots;
+    const dayAfterTomorrowBookingRate = formatBookingRate(dayAfterTomorrowBookedSlots, dayAfterTomorrowTotalSlots);
+
+    // Total metrics across 3 days
+    const totalSlots = todayTotalSlots + tomorrowTotalSlots + dayAfterTomorrowTotalSlots;
+    const totalBookedSlots = todayBookedSlots + tomorrowBookedSlots + dayAfterTomorrowBookedSlots;
+    const overallBookingRate = formatBookingRate(totalBookedSlots, totalSlots);
 
     // Build response data
     const metrics: MetricData[] = [
@@ -222,23 +341,23 @@ export const getTodaysDashboard = async (
         subtitle: "Registered students"
       },
       {
-        title: "Total Slots",
+        title: "Total Slots (3 Days)",
         value: totalSlots,
         subtitle: "Combined slot count"
       },
       {
-        title: "Booking Rate",
-        value: bookingRate,
-        subtitle: "Utilization percentage"
+        title: "Overall Booking Rate",
+        value: overallBookingRate,
+        subtitle: "3-day utilization percentage"
       }
     ];
 
     const pieCharts: PieChartData[] = [
       {
-        title: "Slot Utilization",
+        title: "Overall Slot Utilization (3 Days)",
         data: [
-          { name: "Booked", value: bookedSlots },
-          { name: "Available", value: availableSlots }
+          { name: "Booked", value: totalBookedSlots },
+          { name: "Available", value: totalSlots - totalBookedSlots }
         ]
       },
       {
@@ -250,23 +369,60 @@ export const getTodaysDashboard = async (
       }
     ];
 
-    const barChartData = generateWeeklyBarChartData(weeklyBookings);
+    // Generate bar chart data for 3 days (matching BarChartDataPoint interface)
+    const barChartData: BarChartDataPoint[] = [
+      {
+        name: "Today",
+        interviews: todayBookings.length
+      },
+      {
+        name: "Tomorrow", 
+        interviews: tomorrowBookings.length
+      },
+      {
+        name: "Day After Tomorrow",
+        interviews: dayAfterTomorrowBookings.length
+      }
+    ];
 
     const dashboardData: DashboardResponse = {
       metrics,
       pieCharts,
-      barChartData
+      barChartData,
+      // Additional daily breakdown
+      dailyBreakdown: {
+        today: {
+          date: todayStart.toLocaleDateString(),
+          totalSlots: todayTotalSlots,
+          bookedSlots: todayBookedSlots,
+          availableSlots: todayAvailableSlots,
+          bookingRate: todayBookingRate
+        },
+        tomorrow: {
+          date: tomorrowStart.toLocaleDateString(),
+          totalSlots: tomorrowTotalSlots,
+          bookedSlots: tomorrowBookedSlots,
+          availableSlots: tomorrowAvailableSlots,
+          bookingRate: tomorrowBookingRate
+        },
+        dayAfterTomorrow: {
+          date: dayAfterTomorrowStart.toLocaleDateString(),
+          totalSlots: dayAfterTomorrowTotalSlots,
+          bookedSlots: dayAfterTomorrowBookedSlots,
+          availableSlots: dayAfterTomorrowAvailableSlots,
+          bookingRate: dayAfterTomorrowBookingRate
+        }
+      }
     };
 
     res.status(200).json({
       success: true,
       data: dashboardData,
-      message: 'Dashboard data fetched successfully'
+      message: 'Dashboard data for next 3 days fetched successfully'
     });
-
   } catch (error: unknown) {
     console.error('Error fetching dashboard data:', error);
-    
+   
     res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard data',

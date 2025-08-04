@@ -6,33 +6,36 @@ import { GoogleCalendarService } from '../services/GoogleCalendarService.js';
 
 const prisma = new PrismaClient();
 const TIME_ZONE = 'Asia/Kolkata';
-
 export const getPublicAvailability = async (req: Request, res: Response) => {
   try {
     const phone = req.params.phone;
 
     if (!phone) {
-      return res.status(400).json({ message: "Phone number is required in URL parameter." });
+      return res
+        .status(400)
+        .json({ message: "Phone number is required in URL parameter." });
     }
 
     // Find the student to get their department
     const student = await prisma.student.findUnique({
       where: { phone },
-      select: { department: true }
+      select: { department: true },
     });
 
     if (!student) {
-      return res.status(404).json({ message: "Student not found with the provided phone number." });
+      return res
+        .status(404)
+        .json({ message: "Student not found with the provided phone number." });
     }
 
     // Check if there are interviewers in the student's department at all
     const interviewerCount = await prisma.user.count({
-      where: { department: student.department }
+      where: { department: student.department },
     });
 
     if (interviewerCount === 0) {
       return res.status(404).json({
-        message: `No interviewers found in student's department (${student.department}). Cannot show availability.`
+        message: `No interviewers found in student's department (${student.department}). Cannot show availability.`,
       });
     }
 
@@ -50,19 +53,20 @@ export const getPublicAvailability = async (req: Request, res: Response) => {
         },
         interviewer: {
           department: student.department,
-        }
+        },
       },
       select: {
         id: true,
         startTime: true,
         endTime: true,
       },
-      orderBy: { startTime: 'asc' }
+      orderBy: { startTime: "asc" },
     });
 
     if (availableSlots.length === 0) {
-      return res.status(404).json({
-        message: `No available slots found for department (${student.department}) in the next 15 days.`
+      return res.status(200).json({
+        availability: [],
+        message: `No available slots found for department (${student.department}) in the next 15 days.`,
       });
     }
 
@@ -71,16 +75,16 @@ export const getPublicAvailability = async (req: Request, res: Response) => {
       const startTimeIST = DateTime.fromJSDate(slot.startTime).setZone(TIME_ZONE);
       const endTimeIST = DateTime.fromJSDate(slot.endTime).setZone(TIME_ZONE);
 
-      const date = startTimeIST.toFormat('yyyy-MM-dd');
+      const date = startTimeIST.toFormat("yyyy-MM-dd");
       if (!acc[date]) acc[date] = [];
 
       acc[date].push({
         id: slot.id,
-        startTime: startTimeIST.toFormat('HH:mm'),
-        endTime: endTimeIST.toFormat('HH:mm'),
+        startTime: startTimeIST.toFormat("HH:mm"),
+        endTime: endTimeIST.toFormat("HH:mm"),
         startTimeISO: slot.startTime.toISOString(),
         endTimeISO: slot.endTime.toISOString(),
-        displayTime: `${startTimeIST.toFormat('HH:mm')} - ${endTimeIST.toFormat('HH:mm')} IST`
+        displayTime: `${startTimeIST.toFormat("HH:mm")} - ${endTimeIST.toFormat("HH:mm")} IST`,
       });
 
       return acc;
@@ -89,15 +93,13 @@ export const getPublicAvailability = async (req: Request, res: Response) => {
     return res.status(200).json({
       availability: groupedByDate,
       timezone: TIME_ZONE,
-      note: "Display times are in Indian Standard Time (IST). Use startTimeISO for booking."
+      note: "Display times are in Indian Standard Time (IST). Use startTimeISO for booking.",
     });
-
   } catch (error) {
     console.error("Error fetching public availability:", error);
     return res.status(500).json({ message: "Failed to fetch availability." });
   }
 };
-
 
 export const createBooking = async (req: Request, res: Response) => {
   const { startTime, studentName, studentEmail, studentPhone } = req.body;
