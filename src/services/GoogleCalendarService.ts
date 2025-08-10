@@ -83,10 +83,10 @@ Join five minutes before the scheduled time and wait for 10 minutes, otherwise, 
                     email: eventDetails.studentEmail,
                     responseStatus: 'needsAction'
                 },
-                {
-                    email: 'admissions@pwioi.com', // Presumably your internal support account
-                    responseStatus: 'accepted'
-                }
+                // {
+                //     email: 'admissions@pwioi.com', // Presumably your internal support account
+                //     responseStatus: 'accepted'
+                // }
             ];
 
             // Use department in the summary to clearly identify interview type
