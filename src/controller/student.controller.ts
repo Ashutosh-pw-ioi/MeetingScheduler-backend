@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient, Department } from '@prisma/client';
 import { StudentService } from '../services/studentService.js';
+import { parseStudentsExcel, RawStudentInput } from '../utils/parseStudentsExcel.utils.js';
 
 const prisma = new PrismaClient();
 
@@ -9,7 +10,7 @@ interface StudentInput {
   name: string;
   email: string;
   phone: string;
-  department: string;
+  department: Department; 
 }
 
 interface CreateStudentsRequest extends Request {
@@ -18,37 +19,41 @@ interface CreateStudentsRequest extends Request {
   };
 }
 
-interface ApiResponse {
+interface ApiResponse<T = any> { 
   success: boolean;
   message: string;
-  data?: {
-    createdCount: number;
-  };
+  data?: T;
   error?: string;
 }
 
-export const createManyStudents = async (
-  req: CreateStudentsRequest,
-  res: Response<ApiResponse>
-): Promise<Response<ApiResponse>> => {
+export const createManyStudentsFromExcel = async (
+  req: Request,
+  res: Response<ApiResponse<{ createdCount: number }>>
+) => {
   try {
-    const { students } = req.body;
-
-    if (!students || !Array.isArray(students) || students.length === 0) {
+    if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: "Please provide an array of students in the request body"
+        message: "Please upload an Excel file with student data",
       });
     }
 
-    const validDepartments = Object.values(Department).map(d => d.toString()); 
-    // ['SOT', 'SOM', 'GENERAL']
+    const students: RawStudentInput[] = parseStudentsExcel(req.file.buffer);
 
-    // Validate all students
+    if (!Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Uploaded Excel file contains no valid student rows",
+      });
+    }
+
+    const validDepartments = Object.values(Department).map((d) => d.toString());
+
+    const validatedStudents: StudentInput[] = [];
+    
     for (let i = 0; i < students.length; i++) {
       const student = students[i];
 
-      // Validate required fields presence
       if (
         !student.applicationId ||
         !student.name ||
@@ -58,66 +63,64 @@ export const createManyStudents = async (
       ) {
         return res.status(400).json({
           success: false,
-          message: `Student at index ${i} is missing required fields (applicationId, name, email, phone, department)`
+          message: `Row ${i + 2}: Missing required fields (applicationId, name, email, phone, department)`,
         });
       }
 
-      // Validate field types
       if (
-        typeof student.applicationId !== 'string' ||
-        typeof student.name !== 'string' ||
-        typeof student.email !== 'string' ||
-        typeof student.phone !== 'string' ||
-        typeof student.department !== 'string'
+        typeof student.applicationId !== "string" ||
+        typeof student.name !== "string" ||
+        typeof student.email !== "string" ||
+        typeof student.phone !== "string" ||
+        typeof student.department !== "string"
       ) {
         return res.status(400).json({
           success: false,
-          message: `Student at index ${i} has invalid field types. All fields must be strings`
+          message: `Row ${i + 2}: All fields must be strings`,
         });
       }
 
-      // Normalize department to uppercase and validate
       const departmentNormalized = student.department.toUpperCase();
       if (!validDepartments.includes(departmentNormalized)) {
         return res.status(400).json({
           success: false,
-          message: `Student at index ${i} has invalid department '${student.department}'. Allowed values: ${validDepartments.join(', ')}.`
+          message: `Row ${i + 2}: Invalid department '${student.department}'. Allowed: ${validDepartments.join(", ")}`,
         });
       }
 
-      // Replace with normalized value
-      student.department = departmentNormalized;
+      validatedStudents.push({
+        applicationId: student.applicationId,
+        name: student.name,
+        email: student.email,
+        phone: student.phone,
+        department: departmentNormalized as Department
+      });
     }
 
-    // All validated: now createMany with normalized department values
     const result = await prisma.student.createMany({
-      data: students as any, // Type casting here since students now conform to Prisma types
-      skipDuplicates: true
+      data: validatedStudents,
+      skipDuplicates: true,
     });
 
     return res.status(201).json({
       success: true,
       message: `Successfully created ${result.count} students`,
-      data: {
-        createdCount: result.count
-      }
+      data: { createdCount: result.count },
     });
+  } catch (err: any) {
+    console.error("Error creating students from Excel:", err);
 
-  } catch (error: any) {
-    console.error('Error creating students:', error);
-
-    if (error.code === 'P2002') {
+    if (err.code === "P2002") {
       return res.status(409).json({
         success: false,
-        message: "One or more students have duplicate email or phone numbers",
-        error: error.message
+        message: "Duplicate student email or phone number found",
       });
     }
 
     return res.status(500).json({
       success: false,
-      message: "Internal server error while creating students",
-      error: error.message
+      message: "Internal server error",
+      error: err.message,
     });
   }
 };
