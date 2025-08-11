@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { DateTime } from 'luxon';
 // Import your real GoogleCalendarService here
 import { GoogleCalendarService } from '../services/GoogleCalendarService.js';
+import { appendBookingToSheet } from '../services/appendToSheetService.js';
 
 const prisma = new PrismaClient();
 const TIME_ZONE = 'Asia/Kolkata';
@@ -303,56 +304,78 @@ export const createBooking = async (req: Request, res: Response) => {
         console.error(`Failed to save fallback meeting link for booking ${newBooking.id}:`, dbErr);
       }
     }
-
-    const bookingDateTime = DateTime.fromJSDate(newBooking.startTime).setZone(TIME_ZONE);
-
-    return res.status(calendarSuccess ? 201 : 206).json({
-      message: `Booking successful! You cannot book another interview.${calendarSuccess ? " A calendar invite has been sent." : " However, calendar invite creation failed."}`,
-      booking: {
-        ...newBooking,
-        startTimeIST: bookingDateTime.toFormat('dd MMMM yyyy, HH:mm'),
-        endTimeIST: DateTime.fromJSDate(newBooking.endTime).setZone(TIME_ZONE).toFormat('dd MMMM yyyy, HH:mm'),
+    try {
+      await appendBookingToSheet({
+        studentName: newBooking.studentName,
+        studentEmail: newBooking.studentEmail,
+        studentPhone: newBooking.studentPhone,
+        department: chosenInterviewer.department,
+        startTime: newBooking.startTime.toISOString(),
+        endTime: newBooking.endTime.toISOString(),
         timezone: TIME_ZONE,
-      },
-      interviewer: {
-        name: chosenInterviewer.name,
-        email: chosenInterviewer.email,
-      },
-      meetingLink,
-      importantNote: "Please attend the interview at the scheduled time. No modifications allowed.",
-      calendarError: !calendarSuccess,
-      ...(calendarErrorMessage && { calendarErrorDetails: calendarErrorMessage }),
-    });
+        interviewerName: chosenInterviewer.name,
+        interviewerEmail: chosenInterviewer.email,
+        meetingLink,
+      });
+      console.log('✅ Booking info appended to Google Sheets successfully.');
+    } catch (sheetErr: any) {
+      console.error('❌ Failed to append booking info to Google Sheets:', sheetErr);
 
-  } catch (error) {
-    console.error("Booking process failed:", error);
-
-    if (error instanceof Error) {
-      if (error.message.includes("slot was just booked") || error.message.includes("Only one booking per student")) {
-        return res.status(409).json({ message: error.message });
+      // Log detailed error information for debugging
+      if (sheetErr.message?.includes('Permission denied')) {
+        console.error('🔐 Sheets Permission Issue: Service account needs Editor access to the sheet');
+        console.error('📧 Service account email should be added as Editor to:', process.env.GOOGLE_SHEET_ID);
       }
     }
+      const bookingDateTime = DateTime.fromJSDate(newBooking.startTime).setZone(TIME_ZONE);
 
-    return res.status(500).json({ message: "An unexpected error occurred during booking." });
+      return res.status(calendarSuccess ? 201 : 206).json({
+        message: `Booking successful! You cannot book another interview.${calendarSuccess ? " A calendar invite has been sent." : " However, calendar invite creation failed."}`,
+        booking: {
+          ...newBooking,
+          startTimeIST: bookingDateTime.toFormat('dd MMMM yyyy, HH:mm'),
+          endTimeIST: DateTime.fromJSDate(newBooking.endTime).setZone(TIME_ZONE).toFormat('dd MMMM yyyy, HH:mm'),
+          timezone: TIME_ZONE,
+        },
+        interviewer: {
+          name: chosenInterviewer.name,
+          email: chosenInterviewer.email,
+        },
+        meetingLink,
+        importantNote: "Please attend the interview at the scheduled time. No modifications allowed.",
+        calendarError: !calendarSuccess,
+        ...(calendarErrorMessage && { calendarErrorDetails: calendarErrorMessage }),
+      });
+
+    } catch (error) {
+      console.error("Booking process failed:", error);
+
+      if (error instanceof Error) {
+        if (error.message.includes("slot was just booked") || error.message.includes("Only one booking per student")) {
+          return res.status(409).json({ message: error.message });
+        }
+      }
+
+      return res.status(500).json({ message: "An unexpected error occurred during booking." });
+    }
+  };
+
+  // Helper to extract meeting link from Google Calendar event object
+  function extractMeetingLink(calendarEvent: any): string {
+    if (calendarEvent.hangoutLink) return calendarEvent.hangoutLink;
+
+    if (calendarEvent.conferenceData?.entryPoints) {
+      const videoEntry = calendarEvent.conferenceData.entryPoints.find(
+        (entry: any) => entry.entryPointType === 'video'
+      );
+      if (videoEntry?.uri) return videoEntry.uri;
+    }
+
+    if (calendarEvent.location && calendarEvent.location.includes('meet.google.com')) {
+      return calendarEvent.location;
+    }
+
+    // Fallback random meeting link identifier
+    const roomId = Math.random().toString(36).substring(2, 15);
+    return `https://meet.google.com/${roomId}`;
   }
-};
-
-// Helper to extract meeting link from Google Calendar event object
-function extractMeetingLink(calendarEvent: any): string {
-  if (calendarEvent.hangoutLink) return calendarEvent.hangoutLink;
-
-  if (calendarEvent.conferenceData?.entryPoints) {
-    const videoEntry = calendarEvent.conferenceData.entryPoints.find(
-      (entry: any) => entry.entryPointType === 'video'
-    );
-    if (videoEntry?.uri) return videoEntry.uri;
-  }
-
-  if (calendarEvent.location && calendarEvent.location.includes('meet.google.com')) {
-    return calendarEvent.location;
-  }
-
-  // Fallback random meeting link identifier
-  const roomId = Math.random().toString(36).substring(2, 15);
-  return `https://meet.google.com/${roomId}`;
-}
