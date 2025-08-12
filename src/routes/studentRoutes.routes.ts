@@ -1,8 +1,9 @@
 import express from 'express';
-import { checkStudents, createManyStudents } from '../controller/student.controller.js';
-const studentRoutes=express.Router()
+import { checkStudents, createManyStudentsFromExcel } from '../controller/student.controller.js';
+import { uploadExcel } from '../middleware/uploadExcel.js';
+const studentRoutes = express.Router()
 
-studentRoutes.post('/createStudents',createManyStudents)
-studentRoutes.post('/checkStudents',checkStudents)
+studentRoutes.post("/uploadStudents", uploadExcel.single("file"), createManyStudentsFromExcel);
+studentRoutes.post('/checkStudents', checkStudents)
 
 export default studentRoutes;
