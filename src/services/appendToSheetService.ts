@@ -3,6 +3,7 @@ import { GoogleAuth } from 'google-auth-library';
 import { DateTime } from 'luxon';
 
 export interface BookingRow {
+  applicationId: string;
   studentName: string;
   studentEmail: string;
   studentPhone: string | null;
@@ -63,6 +64,7 @@ export async function appendBookingToSheet(rowData: BookingRow): Promise<sheets_
 
     // Prepare the row data
     const values = [[
+      rowData.applicationId,
       rowData.studentName,
       rowData.studentEmail,
       rowData.studentPhone || '', // Handle null values
@@ -92,7 +94,7 @@ export async function appendBookingToSheet(rowData: BookingRow): Promise<sheets_
     // Append the data
     const response = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Sheet1!A:J', // Use full column range instead of A2
+      range: 'Sheet1!A:K', 
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values },
