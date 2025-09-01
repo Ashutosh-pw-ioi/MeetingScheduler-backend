@@ -144,7 +144,9 @@ export const createBooking = async (req: Request, res: Response) => {
     // Fetch student and their department
     const student = await prisma.student.findUnique({
       where: { phone: sanitizedData.studentPhone },
-      select: { department: true }
+      select: { department: true ,
+        applicationId:true
+      }
     });
 
     if (!student) {
@@ -306,6 +308,7 @@ export const createBooking = async (req: Request, res: Response) => {
     }
     try {
       await appendBookingToSheet({
+        applicationId: student.applicationId,
         studentName: newBooking.studentName,
         studentEmail: newBooking.studentEmail,
         studentPhone: newBooking.studentPhone,
